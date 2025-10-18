@@ -6,7 +6,8 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "ws": "ts-node --transpile-only ws-server/server.ts"
   },
   "dependencies": {
     "monaco-editor": "^0.54.0",
