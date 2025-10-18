@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from "react";
 import io from "socket.io-client";
 import type { Socket } from "socket.io-client";
-import * as monaco from "monaco-editor";
 import { v4 as uuidv4 } from "uuid";
+import dynamic from "next/dynamic";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
 
@@ -19,13 +19,94 @@ type RoomState = {
 
 export default function Room({ params }: { params: { roomId: string } }) {
   const { roomId } = params;
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const editorRef = useRef<any>(null);
   const monacoEl = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<typeof Socket | null>(null);
+  const [monaco, setMonaco] = useState<any>(null);
+  const [isClient, setIsClient] = useState(false);
 
   const [language, setLanguage] = useState("javascript");
   const [chat, setChat] = useState<RoomState["chat"]>([]);
   const [name, setName] = useState<string>("Anon");
+
+  // Load Monaco Editor only on client side
+  useEffect(() => {
+    setIsClient(true);
+    const loadMonaco = async () => {
+      try {
+        // Set up Monaco Environment with getWorker instead of getWorkerUrl
+        (window as any).MonacoEnvironment = {
+          getWorker: function (workerId: string, label: string) {
+            // Create a more complete worker blob
+            const workerCode = `
+              // Simple worker implementation
+              let initialized = false;
+              
+              self.addEventListener('message', function(e) {
+                const { id, method, params } = e.data;
+                
+                // Initialize response
+                if (!initialized) {
+                  initialized = true;
+                  self.postMessage({ type: 'initialized' });
+                }
+                
+                // Handle common Monaco worker methods
+                switch (method) {
+                  case 'initialize':
+                    self.postMessage({ id, result: true });
+                    break;
+                  case 'getSemanticDiagnostics':
+                  case 'getSyntacticDiagnostics':
+                  case 'getSuggestionDiagnostics':
+                    self.postMessage({ id, result: [] });
+                    break;
+                  case 'getCompletionItems':
+                    self.postMessage({ id, result: { suggestions: [] } });
+                    break;
+                  case 'getSignatureHelp':
+                    self.postMessage({ id, result: null });
+                    break;
+                  case 'getQuickInfo':
+                    self.postMessage({ id, result: null });
+                    break;
+                  case 'getDefinition':
+                  case 'getReferences':
+                    self.postMessage({ id, result: [] });
+                    break;
+                  default:
+                    // Default response for unknown methods
+                    self.postMessage({ id, result: null });
+                }
+              });
+              
+              // Handle errors
+              self.addEventListener('error', function(e) {
+                console.log('Worker error:', e);
+              });
+            `;
+            
+            const blob = new Blob([workerCode], { type: 'application/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
+            const worker = new Worker(blobUrl);
+            
+            // Clean up blob URL after worker is created
+            worker.addEventListener('message', () => {
+              URL.revokeObjectURL(blobUrl);
+            }, { once: true });
+            
+            return worker;
+          }
+        };
+
+        const monacoEditor = await import("monaco-editor");
+        setMonaco(monacoEditor);
+      } catch (error) {
+        console.error('Failed to load Monaco Editor:', error);
+      }
+    };
+    loadMonaco();
+  }, []);
 
   // Connect WS
   useEffect(() => {
@@ -52,7 +133,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
     socket.on("language-change", ({ language }: { language: string }) => {
       setLanguage(language);
-      if (editorRef.current) {
+      if (editorRef.current && monaco) {
         const model = editorRef.current.getModel();
         if (model) monaco.editor.setModelLanguage(model, language);
       }
@@ -69,41 +150,66 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
   // Init Monaco
   useEffect(() => {
-    if (!monacoEl.current) return;
+    if (!monacoEl.current || !monaco || !isClient) return;
     
-    // Dispose existing editor if it exists
-    if (editorRef.current) {
-      editorRef.current.dispose();
+    try {
+      // Dispose existing editor if it exists
+      if (editorRef.current) {
+        editorRef.current.dispose();
+      }
+      
+      const editor = monaco.editor.create(monacoEl.current, {
+        value: "// Start typing together...\n",
+        language,
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 14,
+        theme: "vs-dark",
+        // Disable features that might cause worker issues
+        wordWrap: 'on',
+        glyphMargin: false,
+        folding: false,
+        lineDecorationsWidth: 0,
+        lineNumbersMinChars: 3,
+        renderLineHighlight: 'none',
+      });
+      editorRef.current = editor;
+
+      const sub = editor.onDidChangeModelContent(() => {
+        try {
+          const code = editor.getValue();
+          socketRef.current?.emit("code-update", { roomId, code });
+        } catch (error) {
+          console.error('Error getting editor value:', error);
+        }
+      });
+
+      return () => {
+        try {
+          sub.dispose();
+          editor.dispose();
+        } catch (error) {
+          console.error('Error disposing editor:', error);
+        }
+      };
+    } catch (error) {
+      console.error('Error creating Monaco editor:', error);
     }
-    
-    const editor = monaco.editor.create(monacoEl.current, {
-      value: "// Start typing together...\n",
-      language,
-      automaticLayout: true,
-      minimap: { enabled: false },
-      fontSize: 14,
-      theme: "vs-dark",
-    });
-    editorRef.current = editor;
-
-    const sub = editor.onDidChangeModelContent(() => {
-      const code = editor.getValue();
-      socketRef.current?.emit("code-update", { roomId, code });
-    });
-
-    return () => {
-      sub.dispose();
-      editor.dispose();
-    };
-  }, [language, roomId]);
+  }, [monaco, language, roomId, isClient]);
 
   // Change language
   function handleLangChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const lang = e.target.value;
-    setLanguage(lang);
-    const model = editorRef.current?.getModel();
-    if (model) monaco.editor.setModelLanguage(model, lang);
-    socketRef.current?.emit("language-change", { roomId, language: lang });
+    try {
+      const lang = e.target.value;
+      setLanguage(lang);
+      if (monaco && editorRef.current) {
+        const model = editorRef.current.getModel();
+        if (model) monaco.editor.setModelLanguage(model, lang);
+      }
+      socketRef.current?.emit("language-change", { roomId, language: lang });
+    } catch (error) {
+      console.error('Error changing language:', error);
+    }
   }
 
   // Chat
@@ -169,8 +275,14 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
       {/* Main */}
       <div className="grid grid-cols-3 gap-0">
-        <div className="col-span-2">
-          <div ref={monacoEl} className="w-full h-full" />
+        <div className="col-span-2 relative">
+          {!monaco || !isClient ? (
+            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
+              <div className="text-white/70">Loading editor...</div>
+            </div>
+          ) : (
+            <div ref={monacoEl} className="w-full h-full" />
+          )}
         </div>
         <div className="col-span-1 border-l border-white/10 flex flex-col">
           <div className="p-3 text-sm font-semibold">Chat</div>
