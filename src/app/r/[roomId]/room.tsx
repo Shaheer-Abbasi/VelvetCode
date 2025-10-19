@@ -480,22 +480,26 @@ export default function Room({ params }: { params: { roomId: string } }) {
   // Show loading until roomId is resolved
   if (!roomId) {
     return (
-      <div className="h-screen bg-neutral-900 text-white flex items-center justify-center">
+      <div className="h-screen bg-gradient-to-br from-gray-950 via-red-950/20 to-gray-950 text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="text-white/70">Loading room...</div>
+          <div className="w-12 h-12 border-3 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-white/90 text-lg font-medium">Loading room...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen bg-neutral-900 text-white flex flex-col">
+    <div className="h-screen bg-gradient-to-br from-gray-950 via-red-950/20 to-gray-950 text-white flex flex-col">
       {/* Header */}
-      <div className="bg-neutral-800 px-4 py-2 border-b border-white/10">
+      <div className="bg-gradient-to-r from-gray-900 via-red-950/30 to-gray-900 px-6 py-3 border-b border-red-500/20 shadow-lg shadow-red-500/5">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">VelvetCode</h1>
-          <div className="text-sm text-white/70">Room: {roomId}</div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-red-400 to-red-600 bg-clip-text text-transparent">
+            VelvetCode
+          </h1>
+          <div className="text-sm text-red-400/80 font-medium px-3 py-1 bg-red-500/10 rounded-full border border-red-500/20">
+            Room: {roomId}
+          </div>
         </div>
       </div>
 
@@ -516,7 +520,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
           <>
             {/* Left Panel - File Explorer */}
             <div 
-              className="flex-shrink-0 border-r border-white/10 flex flex-col overflow-hidden"
+              className="flex-shrink-0 border-r border-red-500/20 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden"
               style={{ width: `${leftPanelWidth}px` }}
             >
               <FileExplorer
@@ -570,13 +574,13 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
             {/* Right Panel - Chat */}
             <div 
-              className="flex-shrink-0 border-l border-white/10 flex flex-col overflow-hidden"
+              className="flex-shrink-0 border-l border-red-500/20 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden"
               style={{ width: `${rightPanelWidth}px` }}
             >
-              <div className="p-3 text-sm font-semibold border-b border-white/10 flex-shrink-0 flex items-center justify-between">
-                <span>Chat</span>
+              <div className="p-3 text-sm font-semibold border-b border-red-500/20 bg-gradient-to-r from-red-950/30 to-transparent flex-shrink-0 flex items-center justify-between">
+                <span className="text-red-400">Chat</span>
                 <input
-                  className="bg-neutral-800 px-2 py-1 rounded text-xs w-20"
+                  className="bg-gray-900 border border-red-500/30 px-3 py-1 rounded-lg text-xs w-24 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 transition-all"
                   placeholder="Name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -641,10 +645,10 @@ export default function Room({ params }: { params: { roomId: string } }) {
             {/* Chat Panel */}
             {activePanel === 'chat' && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="p-3 text-sm font-semibold border-b border-white/10 flex-shrink-0 flex items-center justify-between">
-                  <span>Chat</span>
+                <div className="p-3 text-sm font-semibold border-b border-red-500/20 bg-gradient-to-r from-red-950/30 to-transparent flex-shrink-0 flex items-center justify-between">
+                  <span className="text-red-400">Chat</span>
                   <input
-                    className="bg-neutral-800 px-2 py-1 rounded text-xs w-20"
+                    className="bg-gray-900 border border-red-500/30 px-3 py-1 rounded-lg text-xs w-24 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 transition-all"
                     placeholder="Name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}

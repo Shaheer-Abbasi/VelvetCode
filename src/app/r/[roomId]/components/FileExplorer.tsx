@@ -90,8 +90,8 @@ export function FileExplorer({
       return (
         <div key={nodeId}>
           <div
-            className={`flex items-center gap-2 px-2 py-1 text-sm hover:bg-white/10 cursor-pointer ${
-              isActive ? 'bg-blue-600/30 text-blue-300' : ''
+            className={`flex items-center gap-2 px-2 py-1.5 text-sm hover:bg-red-500/10 cursor-pointer transition-colors rounded-md mx-1 ${
+              isActive ? 'bg-gradient-to-r from-red-500/20 to-red-500/10 text-red-300 border-l-2 border-red-500' : ''
             }`}
             style={{ paddingLeft: `${level * 16 + 8}px` }}
             onClick={() => {
@@ -117,7 +117,7 @@ export function FileExplorer({
             
             {isEditing ? (
               <input
-                className="bg-transparent border-b border-blue-400 outline-none flex-1"
+                className="bg-transparent border-b border-red-400 outline-none flex-1 text-white focus:border-red-500"
                 value={editingName}
                 onChange={(e) => setEditingName(e.target.value)}
                 onBlur={confirmRename}
@@ -147,26 +147,26 @@ export function FileExplorer({
 
   return (
     <div className="h-full flex flex-col">
-      <div className="p-3 text-sm font-semibold border-b border-white/10">
+      <div className="p-3 text-sm font-semibold border-b border-red-500/20 bg-gradient-to-r from-red-950/30 to-transparent">
         <div className="flex items-center justify-between">
-          <span>Files</span>
+          <span className="text-red-400">Files</span>
           <div className="flex gap-1">
             <button
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10"
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 hover:border hover:border-red-500/40 transition-all"
               onClick={() => onCreateFile("new-file.js")}
               title="New File"
             >
               📄
             </button>
             <button
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10"
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 hover:border hover:border-red-500/40 transition-all"
               onClick={() => onCreateFolder("new-folder")}
               title="New Folder"
             >
               📁
             </button>
             <label
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/20 hover:border hover:border-red-500/40 cursor-pointer transition-all"
               title="Upload File"
             >
               ⬆️
@@ -200,13 +200,13 @@ export function FileExplorer({
             onClick={() => setContextMenu(null)}
           />
           <div
-            className="fixed z-50 bg-gray-800 border border-gray-600 rounded shadow-lg py-1 min-w-32"
+            className="fixed z-50 bg-gray-900 border border-red-500/30 rounded-lg shadow-xl shadow-red-500/10 py-1 min-w-36 backdrop-blur-sm"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             {contextMenu.fileId ? (
               <>
                 <button
-                  className="w-full px-3 py-1 text-left text-sm hover:bg-white/10"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-500/20 transition-colors"
                   onClick={() => {
                     const file = files[contextMenu.fileId!];
                     handleRename(contextMenu.fileId!, file.name);
@@ -215,7 +215,7 @@ export function FileExplorer({
                   Rename
                 </button>
                 <button
-                  className="w-full px-3 py-1 text-left text-sm hover:bg-white/10 text-red-400"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-500/20 text-red-400 transition-colors"
                   onClick={() => {
                     onDeleteFile(contextMenu.fileId!);
                     setContextMenu(null);
@@ -227,7 +227,7 @@ export function FileExplorer({
             ) : (
               <>
                 <button
-                  className="w-full px-3 py-1 text-left text-sm hover:bg-white/10"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-500/20 transition-colors"
                   onClick={() => {
                     onCreateFile("new-file.js");
                     setContextMenu(null);
@@ -236,7 +236,7 @@ export function FileExplorer({
                   New File
                 </button>
                 <button
-                  className="w-full px-3 py-1 text-left text-sm hover:bg-white/10"
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-red-500/20 transition-colors"
                   onClick={() => {
                     onCreateFolder("new-folder");
                     setContextMenu(null);

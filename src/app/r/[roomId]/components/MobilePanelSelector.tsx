@@ -15,32 +15,32 @@ export function MobilePanelSelector({
   chatCount: number;
 }) {
   return (
-    <div className="flex border-b border-white/10 bg-neutral-900">
+    <div className="flex border-b border-red-500/20 bg-gray-900/50 backdrop-blur-sm">
       <button
-        className={`flex-1 py-2 px-3 text-sm font-medium ${
+        className={`flex-1 py-3 px-4 text-sm font-medium transition-all ${
           activePanel === 'files' 
-            ? 'bg-neutral-800 text-white border-b-2 border-blue-500' 
-            : 'text-white/70 hover:text-white hover:bg-white/5'
+            ? 'bg-gradient-to-b from-red-500/20 to-red-500/10 text-white border-b-2 border-red-500' 
+            : 'text-white/70 hover:text-white hover:bg-red-500/5'
         }`}
         onClick={() => onPanelChange('files')}
       >
         📁 Files ({fileCount})
       </button>
       <button
-        className={`flex-1 py-2 px-3 text-sm font-medium ${
+        className={`flex-1 py-3 px-4 text-sm font-medium transition-all ${
           activePanel === 'editor' 
-            ? 'bg-neutral-800 text-white border-b-2 border-blue-500' 
-            : 'text-white/70 hover:text-white hover:bg-white/5'
+            ? 'bg-gradient-to-b from-red-500/20 to-red-500/10 text-white border-b-2 border-red-500' 
+            : 'text-white/70 hover:text-white hover:bg-red-500/5'
         }`}
         onClick={() => onPanelChange('editor')}
       >
         💻 Editor
       </button>
       <button
-        className={`flex-1 py-2 px-3 text-sm font-medium ${
+        className={`flex-1 py-3 px-4 text-sm font-medium transition-all ${
           activePanel === 'chat' 
-            ? 'bg-neutral-800 text-white border-b-2 border-blue-500' 
-            : 'text-white/70 hover:text-white hover:bg-white/5'
+            ? 'bg-gradient-to-b from-red-500/20 to-red-500/10 text-white border-b-2 border-red-500' 
+            : 'text-white/70 hover:text-white hover:bg-red-500/5'
         }`}
         onClick={() => onPanelChange('chat')}
       >

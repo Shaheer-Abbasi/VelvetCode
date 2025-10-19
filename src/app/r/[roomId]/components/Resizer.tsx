@@ -46,11 +46,11 @@ export function Resizer({
 
   return (
     <div
-      className={`bg-neutral-700 hover:bg-neutral-600 transition-colors flex-shrink-0 ${
+      className={`bg-red-900/30 hover:bg-red-500/40 transition-colors flex-shrink-0 ${
         direction === 'horizontal' 
-          ? 'w-2 cursor-col-resize' 
-          : 'h-2 cursor-row-resize'
-      } ${isResizing ? 'bg-blue-500' : ''}`}
+          ? 'w-1 cursor-col-resize' 
+          : 'h-1 cursor-row-resize'
+      } ${isResizing ? 'bg-red-500 shadow-lg shadow-red-500/50' : ''}`}
       onMouseDown={handleMouseDown}
       style={{
         userSelect: 'none',
