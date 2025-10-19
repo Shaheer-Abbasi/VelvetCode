@@ -6,6 +6,12 @@ import io from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { v4 as uuidv4 } from "uuid";
 import dynamic from "next/dynamic";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+
+// Import highlight.js CSS for syntax highlighting
+import "highlight.js/styles/vs2015.css";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
 
@@ -28,6 +34,11 @@ export default function Room({ params }: { params: { roomId: string } }) {
   const [language, setLanguage] = useState("javascript");
   const [chat, setChat] = useState<RoomState["chat"]>([]);
   const [name, setName] = useState<string>("Anon");
+  const [isAILoading, setIsAILoading] = useState(false);
+  const isUpdatingFromRemoteRef = useRef(false);
+  const lastRemoteContentRef = useRef("");
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Load Monaco Editor only on client side
   useEffect(() => {
@@ -118,16 +129,22 @@ export default function Room({ params }: { params: { roomId: string } }) {
     socket.on("room-state", (state: RoomState) => {
       setLanguage(state.language);
       setChat(state.chat);
-      if (editorRef.current) {
+      if (editorRef.current && state.code !== lastRemoteContentRef.current) {
+        isUpdatingFromRemoteRef.current = true;
+        lastRemoteContentRef.current = state.code || "";
         editorRef.current.setValue(state.code || "");
+        setTimeout(() => { isUpdatingFromRemoteRef.current = false; }, 100);
       }
     });
 
     socket.on("code-update", ({ code }: { code: string }) => {
-      if (editorRef.current && editorRef.current.getValue() !== code) {
+      if (editorRef.current && code !== lastRemoteContentRef.current && editorRef.current.getValue() !== code) {
+        isUpdatingFromRemoteRef.current = true;
+        lastRemoteContentRef.current = code;
         const cur = editorRef.current.getPosition();
         editorRef.current.setValue(code);
         if (cur) editorRef.current.setPosition(cur);
+        setTimeout(() => { isUpdatingFromRemoteRef.current = false; }, 100);
       }
     });
 
@@ -141,6 +158,12 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
     socket.on("chat-message", (msg: ChatMessage) => {
       setChat((c) => [...c, msg]);
+      // Scroll to bottom when new message arrives
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 100);
     });
 
     return () => {
@@ -177,8 +200,20 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
       const sub = editor.onDidChangeModelContent(() => {
         try {
-          const code = editor.getValue();
-          socketRef.current?.emit("code-update", { roomId, code });
+          // Don't emit updates if we're currently updating from remote
+          if (isUpdatingFromRemoteRef.current) return;
+          
+          // Debounce the updates to prevent rapid-fire emissions
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
+          
+          updateTimeoutRef.current = setTimeout(() => {
+            if (!isUpdatingFromRemoteRef.current) {
+              const code = editor.getValue();
+              socketRef.current?.emit("code-update", { roomId, code });
+            }
+          }, 150); // 150ms debounce
         } catch (error) {
           console.error('Error getting editor value:', error);
         }
@@ -186,6 +221,9 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
       return () => {
         try {
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
           sub.dispose();
           editor.dispose();
         } catch (error) {
@@ -212,7 +250,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
     }
   }
 
-  // Chat
+  // Chat - for user messages
   function sendChat(text: string) {
     const msg = { id: uuidv4(), name: name || "Anon", text, ts: Date.now() };
     socketRef.current?.emit("chat-message", { roomId, msg });
@@ -220,13 +258,52 @@ export default function Room({ params }: { params: { roomId: string } }) {
   }
 
   async function askAI(kind: "improve" | "explain" | "test") {
-    const code = editorRef.current?.getValue() || "";
-    const res = await fetch("/api/ai/suggest", {
-      method: "POST",
-      body: JSON.stringify({ kind, language, code }),
-    });
-    const data = await res.json();
-    sendChat(data.message); // drop AI result into chat
+    setIsAILoading(true);
+    try {
+      const code = editorRef.current?.getValue() || "";
+      const res = await fetch("/api/ai/suggest", {
+        method: "POST",
+        body: JSON.stringify({ kind, language, code }),
+      });
+      const data = await res.json();
+      
+      if (res.ok) {
+        // Send AI message with Agent prefix
+        const aiMsg = { 
+          id: uuidv4(), 
+          name: "Agent", 
+          text: data.message, 
+          ts: Date.now() 
+        };
+        socketRef.current?.emit("chat-message", { roomId, msg: aiMsg });
+      } else {
+        // Handle error
+        const errorMsg = { 
+          id: uuidv4(), 
+          name: "Agent", 
+          text: `Error: ${data.error || 'Failed to get AI response'}`, 
+          ts: Date.now() 
+        };
+        socketRef.current?.emit("chat-message", { roomId, msg: errorMsg });
+      }
+    } catch (error) {
+      console.error('AI request failed:', error);
+      const errorMsg = { 
+        id: uuidv4(), 
+        name: "Agent", 
+        text: "Error: Failed to connect to AI service", 
+        ts: Date.now() 
+      };
+      socketRef.current?.emit("chat-message", { roomId, msg: errorMsg });
+    } finally {
+      setIsAILoading(false);
+      // Scroll to bottom after AI response
+      setTimeout(() => {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }, 200);
+    }
   }
 
   return (
@@ -253,22 +330,25 @@ export default function Room({ params }: { params: { roomId: string } }) {
             onChange={(e) => setName(e.target.value)}
           />
           <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
+            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => askAI("improve")}
+            disabled={isAILoading}
           >
-            AI: Improve
+            {isAILoading ? "Loading..." : "AI: Improve"}
           </button>
           <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
+            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => askAI("explain")}
+            disabled={isAILoading}
           >
-            AI: Explain
+            {isAILoading ? "Loading..." : "AI: Explain"}
           </button>
           <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
+            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={() => askAI("test")}
+            disabled={isAILoading}
           >
-            AI: Tests
+            {isAILoading ? "Loading..." : "AI: Tests"}
           </button>
         </div>
       </div>
@@ -286,13 +366,14 @@ export default function Room({ params }: { params: { roomId: string } }) {
         </div>
         <div className="col-span-1 border-l border-white/10 flex flex-col">
           <div className="p-3 text-sm font-semibold">Chat</div>
-          <div className="flex-1 overflow-auto px-3 space-y-2">
+          <div 
+            ref={chatContainerRef}
+            className="flex-1 overflow-auto px-3 space-y-2"
+          >
             {chat.map((m) => (
-              <div key={m.id} className="text-sm">
-                <span className="font-semibold">{m.name}: </span>
-                <span className="opacity-90 whitespace-pre-wrap">{m.text}</span>
-              </div>
+              <ChatMessageComponent key={m.id} message={m} />
             ))}
+            {isAILoading && <AILoadingIndicator />}
           </div>
           <ChatInput onSend={(t) => t && sendChat(t)} />
         </div>
@@ -301,6 +382,80 @@ export default function Room({ params }: { params: { roomId: string } }) {
       {/* Footer */}
       <div className="text-xs p-2 opacity-60 border-t border-white/10">
         Built at the hackathon ✨
+      </div>
+    </div>
+  );
+}
+
+function ChatMessageComponent({ message }: { message: ChatMessage }) {
+  const isAgent = message.name === 'Agent';
+  const isUserMessage = !isAgent;
+
+  return (
+    <div className={`text-sm ${isAgent ? 'bg-blue-900/20 p-3 rounded border-l-2 border-blue-400 my-2' : 'my-1'}`}>
+      <div className={`font-semibold mb-1 ${isAgent ? 'text-blue-400' : 'text-white'}`}>
+        {message.name}:
+      </div>
+      <div className="opacity-90">
+        {isAgent ? (
+          <div className="markdown-content">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              rehypePlugins={[rehypeHighlight]}
+              components={{
+                // Custom styling for markdown elements
+                code: ({ node, inline, className, children, ...props }: any) => {
+                  const match = /language-(\w+)/.exec(className || '');
+                  return !inline ? (
+                    <pre className="bg-gray-800 rounded p-3 my-2 overflow-x-auto">
+                      <code className={className} {...props}>
+                        {children}
+                      </code>
+                    </pre>
+                  ) : (
+                    <code className="bg-gray-700 px-1 py-0.5 rounded text-sm" {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+                p: ({ children }: any) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }: any) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                ol: ({ children }: any) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                li: ({ children }: any) => <li className="ml-2">{children}</li>,
+                h1: ({ children }: any) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                h2: ({ children }: any) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                h3: ({ children }: any) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                blockquote: ({ children }: any) => (
+                  <blockquote className="border-l-2 border-gray-500 pl-3 italic opacity-80 mb-2">
+                    {children}
+                  </blockquote>
+                ),
+                strong: ({ children }: any) => <strong className="font-bold text-white">{children}</strong>,
+                em: ({ children }: any) => <em className="italic">{children}</em>,
+              }}
+            >
+              {message.text}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <span className="whitespace-pre-wrap">{message.text}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AILoadingIndicator() {
+  return (
+    <div className="text-sm flex items-center gap-2">
+      <span className="font-semibold text-blue-400">Agent: </span>
+      <div className="flex items-center gap-1">
+        <div className="flex space-x-1">
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+          <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+        </div>
+        <span className="text-xs opacity-70 ml-2">thinking...</span>
       </div>
     </div>
   );
