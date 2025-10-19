@@ -6,14 +6,19 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('AI API called with request');
     const { kind, language, code } = await request.json();
+    console.log('Request data:', { kind, language, codeLength: code?.length });
 
     if (!process.env.GEMINI_API_KEY) {
+      console.log('GEMINI_API_KEY not found in environment');
       return NextResponse.json(
         { error: 'GEMINI_API_KEY is not configured' },
         { status: 500 }
       );
     }
+
+    console.log('GEMINI_API_KEY found, proceeding...');
 
     if (!kind || !language || !code) {
       return NextResponse.json(
@@ -22,8 +27,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the generative model - using the correct model name
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    // Get the generative model with correct model name
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Create prompts based on the request type
     let prompt = '';
@@ -78,9 +83,12 @@ Please provide:
     }
 
     // Generate content using Gemini
+    console.log('Calling Gemini API with prompt length:', prompt.length);
     const result = await model.generateContent(prompt);
+    console.log('Gemini API responded');
     const response = await result.response;
     const text = response.text();
+    console.log('Response text length:', text.length);
 
     return NextResponse.json({
       message: text,
