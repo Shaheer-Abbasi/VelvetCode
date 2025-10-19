@@ -17,18 +17,14 @@ import { MonacoEditorWrapper } from './components/MonacoEditorWrapper';
 import { AIActions } from './components/AIActions';
 import { useSocket } from './components/useSocket';
 
-export default function Room({ params }: { params: Promise<{ roomId: string }> }) {
-  const [roomId, setRoomId] = useState<string>('');
+export default function Room({ params }: { params: { roomId: string } }) {
+  const [roomId, setRoomId] = useState<string>(params.roomId);
   
-  // Handle async params in Next.js 15
+  // Room ID is now directly available from params
   useEffect(() => {
-    const getRoomId = async () => {
-      const resolvedParams = await params;
-      console.log('Resolved roomId:', resolvedParams.roomId);
-      setRoomId(resolvedParams.roomId);
-    };
-    getRoomId();
-  }, [params]);
+    console.log('Room ID:', params.roomId);
+    setRoomId(params.roomId);
+  }, [params.roomId]);
   
   console.log('Room component initialized with roomId:', roomId);
   
