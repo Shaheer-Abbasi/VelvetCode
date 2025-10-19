@@ -7,7 +7,8 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
-    "ws": "ts-node --project ws-server/tsconfig.json ws-server/server.ts"
+    "ws": "ts-node --project ws-server/tsconfig.json ws-server/server.ts",
+    "start:ws": "node --loader ts-node/esm ws-server/server.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

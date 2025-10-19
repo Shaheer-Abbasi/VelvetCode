@@ -1,0 +1,27 @@
+services:
+  # Next.js Web Application
+  - type: web
+    name: velvetcode
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: WS_URL
+        value: wss://velvetcode-ws.onrender.com
+    healthCheckPath: /
+
+  # WebSocket Server
+  - type: web
+    name: velvetcode-ws
+    env: node
+    buildCommand: npm install
+    startCommand: npm run start:ws
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
