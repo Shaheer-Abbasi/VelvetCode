@@ -103,31 +103,60 @@ export function AILoadingIndicator() {
   );
 }
 
-export function ChatInput({ onSend }: { onSend: (t: string) => void }) {
+export function ChatInput({ onSend, onAskAI }: { onSend: (t: string) => void; onAskAI?: (prompt: string) => void }) {
   const [text, setText] = useState("");
+  const [sendToAI, setSendToAI] = useState(false);
+  
+  const handleSend = () => {
+    const message = text.trim();
+    if (!message) return;
+    
+    if (sendToAI && onAskAI) {
+      onAskAI(message);
+    } else {
+      onSend(message);
+    }
+    setText("");
+  };
+  
   return (
-    <div className="p-2 flex gap-2 border-t border-white/10">
-      <input
-        className="flex-1 bg-neutral-900 px-3 py-2 rounded"
-        placeholder="Type a message..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            onSend(text.trim());
-            setText("");
-          }
-        }}
-      />
-      <button
-        className="bg-white/10 px-3 py-2 rounded hover:bg-white/20"
-        onClick={() => {
-          onSend(text.trim());
-          setText("");
-        }}
-      >
-        Send
-      </button>
+    <div className="border-t border-white/10">
+      {onAskAI && (
+        <div className="px-2 pt-2 flex items-center gap-2">
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sendToAI}
+              onChange={(e) => setSendToAI(e.target.checked)}
+              className="w-3 h-3"
+            />
+            <span className={sendToAI ? 'text-blue-400 font-semibold' : 'text-white/70'}>
+              Ask AI directly
+            </span>
+          </label>
+        </div>
+      )}
+      <div className="p-2 flex gap-2">
+        <input
+          className="flex-1 bg-neutral-900 px-3 py-2 rounded"
+          placeholder={sendToAI ? "Ask AI anything..." : "Type a message..."}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              handleSend();
+            }
+          }}
+        />
+        <button
+          className={`px-3 py-2 rounded hover:bg-white/20 ${
+            sendToAI ? 'bg-blue-500/20 text-blue-400 border border-blue-400' : 'bg-white/10'
+          }`}
+          onClick={handleSend}
+        >
+          {sendToAI ? '🤖 Ask AI' : 'Send'}
+        </button>
+      </div>
     </div>
   );
 }

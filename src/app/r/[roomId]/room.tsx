@@ -362,6 +362,64 @@ export default function Room({ params }: { params: { roomId: string } }) {
     }
   };
 
+  const askAIDirectly = async (prompt: string) => {
+    if (!prompt.trim()) return;
+    
+    setIsAILoading(true);
+    
+    // Add user's question to chat
+    const userMessage: ChatMessage = {
+      id: uuidv4(),
+      name: name,
+      text: prompt,
+      ts: Date.now()
+    };
+    socket?.emit("chat-message", { roomId, msg: userMessage });
+    
+    try {
+      // Get context from active file if available
+      const context = activeFileId && files[activeFileId] 
+        ? { language: files[activeFileId].language || 'javascript' }
+        : undefined;
+      
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, context }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'AI request failed');
+      }
+      
+      const { message } = await response.json();
+      
+      // Send AI response as chat message
+      const aiMessage: ChatMessage = {
+        id: uuidv4(),
+        name: 'AI Agent',
+        text: message,
+        ts: Date.now()
+      };
+      
+      socket?.emit("chat-message", { roomId, msg: aiMessage });
+    } catch (error) {
+      console.error('AI chat request failed:', error);
+      
+      // Send error message to chat
+      const errorMessage: ChatMessage = {
+        id: uuidv4(),
+        name: 'AI Agent',
+        text: 'Sorry, I encountered an error. Please try again.',
+        ts: Date.now()
+      };
+      socket?.emit("chat-message", { roomId, msg: errorMessage });
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
   const handleEditorReady = (editor: any) => {
     console.log('Editor ready:', editor);
     console.log('Editor options:', {
@@ -534,7 +592,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
                 {isAILoading && <AILoadingIndicator />}
               </div>
               <div className="flex-shrink-0">
-                <ChatInput onSend={sendChat} />
+                <ChatInput onSend={sendChat} onAskAI={askAIDirectly} />
               </div>
             </div>
           </>
@@ -602,7 +660,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
                   {isAILoading && <AILoadingIndicator />}
                 </div>
                 <div className="flex-shrink-0">
-                  <ChatInput onSend={sendChat} />
+                  <ChatInput onSend={sendChat} onAskAI={askAIDirectly} />
                 </div>
               </div>
             )}
