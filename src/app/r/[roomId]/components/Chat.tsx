@@ -10,7 +10,7 @@ import { ChatMessage } from './types';
 import "highlight.js/styles/vs2015.css";
 
 export function ChatMessageComponent({ message }: { message: ChatMessage }) {
-  const isAgent = message.name === 'Agent';
+  const isAgent = message.name === 'AI Agent' || message.name === 'Agent';
   const isUserMessage = !isAgent;
 
   return (

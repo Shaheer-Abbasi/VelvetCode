@@ -41,13 +41,14 @@ export function useSocket({
     // Add connection event handlers
     socket.on('connect', () => {
       console.log('Socket connected:', socket.id);
+      // Emit join-room AFTER connection is established
+      console.log(`Emitting join-room for: ${roomId}`);
+      socket.emit("join-room", roomId);
     });
 
     socket.on('disconnect', () => {
       console.log('Socket disconnected');
     });
-
-    socket.emit("join-room", roomId);
 
     socket.on("room-state", (state: RoomState) => {
       console.log(`Received room state for room: ${roomId}`, state);

@@ -25,95 +25,115 @@ export function MonacoEditor({
 
   // Initialize Monaco Editor
   useEffect(() => {
-    if (!monacoEl.current || !monaco || !isClient) return;
-    
-    const container = monacoEl.current;
-    
-    // If editor already exists, just ensure it's properly sized and has content
-    if (editorRef.current) {
-      try {
-        editorRef.current.layout();
-        const currentContent = editorRef.current.getValue();
-        
-        if (currentContent !== initialContent && !isUpdatingFromRemoteRef.current) {
-          isUpdatingFromRemoteRef.current = true;
-          editorRef.current.setValue(initialContent);
-          setTimeout(() => { 
-            isUpdatingFromRemoteRef.current = false; 
-          }, 50);
-        }
-      } catch (error) {
-        console.warn('Error updating editor:', error);
-      }
+    if (!monacoEl.current || !monaco || !isClient) {
+      console.log('Skipping editor init:', { 
+        hasRef: !!monacoEl.current, 
+        hasMonaco: !!monaco, 
+        isClient 
+      });
       return;
     }
     
-    try {
-      const editor = monaco.editor.create(container, {
-        value: initialContent,
-        language,
-        automaticLayout: true,
-        theme: "vs-dark",
-        minimap: { enabled: false },
-        fontSize: 14,
-        wordWrap: 'on',
-        scrollBeyondLastLine: false,
-        readOnly: false, // Explicitly ensure it's editable
-        domReadOnly: false,
-        quickSuggestions: false,
-        suggestOnTriggerCharacters: false,
-        acceptSuggestionOnEnter: 'off',
-        wordBasedSuggestions: 'off',
-      });
-      
-      editorRef.current = editor;
-      onEditorReady(editor);
-
-      // Handle content changes
-      const subscription = editor.onDidChangeModelContent(() => {
-        if (isUpdatingFromRemoteRef.current) return;
-        
+    const container = monacoEl.current;
+    console.log('Container available, dimensions:', container.clientWidth, 'x', container.clientHeight);
+    
+    // Delay to ensure container has proper dimensions
+    const initTimeout = setTimeout(() => {
+      console.log('Initializing editor after delay, dimensions:', container.clientWidth, 'x', container.clientHeight);
+    
+      // If editor already exists, just ensure it's properly sized and has content
+      if (editorRef.current) {
         try {
-          const content = editor.getValue();
-          console.log('Monaco editor content changed:', content.length, 'characters');
-          onContentChange(content);
+          editorRef.current.layout();
+          const currentContent = editorRef.current.getValue();
+          
+          if (currentContent !== initialContent && !isUpdatingFromRemoteRef.current) {
+            isUpdatingFromRemoteRef.current = true;
+            editorRef.current.setValue(initialContent);
+            setTimeout(() => { 
+              isUpdatingFromRemoteRef.current = false; 
+            }, 50);
+          }
         } catch (error) {
-          console.warn('Error in content change handler:', error);
+          console.warn('Error updating editor:', error);
         }
-      });
+        return;
+      }
+      
+      try {
+        console.log('Creating new Monaco editor instance...');
+        const editor = monaco.editor.create(container, {
+          value: initialContent,
+          language,
+          automaticLayout: true,
+          theme: "vs-dark",
+          minimap: { enabled: false },
+          fontSize: 14,
+          wordWrap: 'on',
+          scrollBeyondLastLine: false,
+          readOnly: false,
+          domReadOnly: false,
+          quickSuggestions: false,
+          suggestOnTriggerCharacters: false,
+          acceptSuggestionOnEnter: 'off',
+          wordBasedSuggestions: 'off',
+        });
+        
+        console.log('Monaco editor created successfully');
+        editorRef.current = editor;
+        onEditorReady(editor);
+        
+        // Force initial layout after a short delay
+        setTimeout(() => {
+          if (editor) {
+            console.log('Forcing editor layout...');
+            editor.layout();
+            editor.focus();
+          }
+        }, 100);
 
-      // Add debugging for editor events
-      const keydownSubscription = editor.onKeyDown((e: any) => {
-        console.log('Monaco editor key pressed:', e.browserEvent.key, 'code:', e.browserEvent.code);
-      });
+        // Handle content changes
+        const subscription = editor.onDidChangeModelContent(() => {
+          if (isUpdatingFromRemoteRef.current) return;
+          
+          try {
+            const content = editor.getValue();
+            console.log('Monaco editor content changed:', content.length, 'characters');
+            onContentChange(content);
+          } catch (error) {
+            console.warn('Error in content change handler:', error);
+          }
+        });
 
-      const focusSubscription = editor.onDidFocusEditorText(() => {
-        console.log('Monaco editor focused');
-      });
+        // Add debugging for editor events
+        const keydownSubscription = editor.onKeyDown((e: any) => {
+          console.log('Monaco editor key pressed:', e.browserEvent.key, 'code:', e.browserEvent.code);
+        });
 
-      const blurSubscription = editor.onDidBlurEditorText(() => {
-        console.log('Monaco editor blurred');
-      });
+        const focusSubscription = editor.onDidFocusEditorText(() => {
+          console.log('Monaco editor focused');
+        });
 
-      // Return cleanup function
-      return () => {
-        if (subscription) {
-          subscription.dispose();
-        }
-        if (keydownSubscription) {
-          keydownSubscription.dispose();
-        }
-        if (focusSubscription) {
-          focusSubscription.dispose();
-        }
-        if (blurSubscription) {
-          blurSubscription.dispose();
-        }
-      };
-    } catch (error) {
-      console.error('Error creating Monaco editor:', error);
-    }
-  }, [monaco, isClient, initialContent]);
+        const blurSubscription = editor.onDidBlurEditorText(() => {
+          console.log('Monaco editor blurred');
+        });
+
+        // Cleanup subscriptions (but not the editor itself, as it's handled by the main cleanup)
+        return () => {
+          if (subscription) subscription.dispose();
+          if (keydownSubscription) keydownSubscription.dispose();
+          if (focusSubscription) focusSubscription.dispose();
+          if (blurSubscription) blurSubscription.dispose();
+        };
+      } catch (error) {
+        console.error('Error creating Monaco editor:', error);
+      }
+    }, 200);
+    
+    return () => {
+      clearTimeout(initTimeout);
+    };
+  }, [monaco, isClient]); // Removed initialContent from dependencies to prevent re-renders
 
   // Handle language changes
   useEffect(() => {

@@ -12,7 +12,8 @@ export function FileExplorer({
   onCreateFile, 
   onCreateFolder, 
   onDeleteFile, 
-  onRenameFile 
+  onRenameFile,
+  onUploadFile 
 }: {
   files: Record<string, FileNode>;
   fileTree: string[];
@@ -22,6 +23,7 @@ export function FileExplorer({
   onCreateFolder: (name: string, parentId?: string) => void;
   onDeleteFile: (fileId: string) => void;
   onRenameFile: (fileId: string, newName: string) => void;
+  onUploadFile: (name: string, content: string, parentId?: string) => void;
 }) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; fileId?: string } | null>(null);
@@ -49,6 +51,21 @@ export function FileExplorer({
     setEditingId(fileId);
     setEditingName(currentName);
     setContextMenu(null);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      onUploadFile(file.name, content);
+    };
+    reader.readAsText(file);
+    
+    // Reset input so the same file can be uploaded again
+    e.target.value = '';
   };
 
   const confirmRename = () => {
@@ -148,6 +165,18 @@ export function FileExplorer({
             >
               📁
             </button>
+            <label
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-white/10 cursor-pointer"
+              title="Upload File"
+            >
+              ⬆️
+              <input
+                type="file"
+                className="hidden"
+                onChange={handleFileUpload}
+                accept="*/*"
+              />
+            </label>
           </div>
         </div>
       </div>

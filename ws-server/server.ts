@@ -205,8 +205,47 @@ io.on("connection", (socket) => {
       state.activeFileId = newId;
     }
 
-    console.log('Emitting file-create to room:', roomId, newFile);
-    io.to(roomId).emit("file-create", { file: newFile, parentId });
+    console.log('Emitting file-add to room:', roomId, newFile);
+    io.to(roomId).emit("file-add", { file: newFile, parentId });
+  });
+
+  // Upload file with content
+  socket.on("file-upload", ({ roomId, name, content, parentId }) => {
+    console.log('Server received file-upload:', { roomId, name, parentId });
+    const state = rooms.get(roomId);
+    if (!state) {
+      console.log('Room not found for file upload:', roomId);
+      return;
+    }
+
+    const newId = generateId();
+    console.log('Generated new file ID:', newId);
+    const newFile: FileNode = {
+      id: newId,
+      name,
+      type: "file",
+      parentId,
+      content,
+      language: getLanguageFromFileName(name)
+    };
+
+    state.files.set(newId, newFile);
+
+    if (parentId) {
+      const parent = state.files.get(parentId);
+      if (parent && parent.type === "folder") {
+        parent.children = parent.children || [];
+        parent.children.push(newId);
+      }
+    } else {
+      state.fileTree.push(newId);
+    }
+
+    // Make uploaded file active
+    state.activeFileId = newId;
+
+    console.log('Emitting file-add for uploaded file:', roomId, newFile);
+    io.to(roomId).emit("file-add", { file: newFile, parentId });
   });
 
   // Delete file/folder

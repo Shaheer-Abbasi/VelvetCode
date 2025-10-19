@@ -103,6 +103,11 @@ export default function Room({ params }: { params: { roomId: string } }) {
 
   // Socket handlers
   const handleRoomState = (state: RoomState) => {
+    console.log('Handling room state:', state);
+    console.log('Files received:', Object.keys(state.files || {}).length);
+    console.log('File tree:', state.fileTree);
+    console.log('Active file ID:', state.activeFileId);
+    
     setFiles(state.files || {});
     setFileTree(state.fileTree || []);
     setActiveFileId(state.activeFileId);
@@ -285,6 +290,11 @@ export default function Room({ params }: { params: { roomId: string } }) {
     socket?.emit("file-create", { roomId, name, type: "folder", parentId });
   };
 
+  const uploadFile = (name: string, content: string, parentId?: string) => {
+    console.log('Uploading file:', { name, parentId, roomId });
+    socket?.emit("file-upload", { roomId, name, content, parentId });
+  };
+
   const deleteFile = (fileId: string) => {
     socket?.emit("file-delete", { roomId, fileId });
   };
@@ -316,35 +326,31 @@ export default function Room({ params }: { params: { roomId: string } }) {
     const activeFile = files[activeFileId];
     const code = editorRef.current.getValue();
     
-    let prompt = "";
-    if (action === "improve") {
-      prompt = `Please improve this ${activeFile.language || 'code'} code and explain the improvements:\n\n${code}`;
-    } else if (action === "explain") {
-      prompt = `Please explain this ${activeFile.language || 'code'} code:\n\n${code}`;
-    } else if (action === "test") {
-      prompt = `Please write unit tests for this ${activeFile.language || 'code'} code:\n\n${code}`;
-    } else {
-      prompt = code;
-    }
-    
     setIsAILoading(true);
     
     try {
       const response = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, language: activeFile.language || 'javascript' }),
+        body: JSON.stringify({ 
+          kind: action, // 'improve', 'explain', or 'test'
+          language: activeFile.language || 'javascript',
+          code: code
+        }),
       });
       
-      if (!response.ok) throw new Error('AI request failed');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'AI request failed');
+      }
       
-      const { suggestion } = await response.json();
+      const { message } = await response.json(); // API returns 'message', not 'suggestion'
       
       // Send AI response as chat message
       const aiMessage: ChatMessage = {
         id: uuidv4(),
-        name: 'Agent',
-        text: suggestion,
+        name: 'AI Agent',
+        text: message,
         ts: Date.now()
       };
       
@@ -404,6 +410,14 @@ export default function Room({ params }: { params: { roomId: string } }) {
   // Get current file content for editor
   const activeFile = activeFileId ? files[activeFileId] : null;
   const editorContent = activeFile?.content || "// Welcome to VelvetCode!\n// Select or create a file to start coding...\n";
+  
+  console.log('Editor rendering with:', {
+    activeFileId,
+    hasActiveFile: !!activeFile,
+    activeFileName: activeFile?.name,
+    contentLength: editorContent.length,
+    content: editorContent.substring(0, 50) + '...'
+  });
 
   // Show loading until roomId is resolved
   if (!roomId) {
@@ -456,6 +470,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
                 onCreateFolder={createFolder}
                 onDeleteFile={deleteFile}
                 onRenameFile={renameFile}
+                onUploadFile={uploadFile}
               />
             </div>
 
@@ -540,6 +555,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
                   onCreateFolder={createFolder}
                   onDeleteFile={deleteFile}
                   onRenameFile={renameFile}
+                  onUploadFile={uploadFile}
                 />
               </div>
             )}
