@@ -24,6 +24,8 @@ const io = new Server(server, {
 });
 
 const rooms = new Map<string, RoomState>();
+const clientRooms = new Map<string, string>(); // Track which room each client is in
+const joinCooldowns = new Map<string, number>(); // Rate limiting for join events
 
 // Utility functions for file operations
 function createDefaultProject(): RoomState {
@@ -79,11 +81,37 @@ function getLanguageFromFileName(fileName: string): string {
 }
 
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId }) => {
+  console.log(`Client connected: ${socket.id}`);
+  
+  socket.on("join-room", (roomId: string) => {
+    // Rate limiting: prevent rapid join events from same client
+    const now = Date.now();
+    const lastJoin = joinCooldowns.get(socket.id) || 0;
+    if (now - lastJoin < 1000) { // 1 second cooldown
+      console.log(`Rate limited join attempt from ${socket.id} for room ${roomId}`);
+      return;
+    }
+    joinCooldowns.set(socket.id, now);
+    
+    // Check if client is already in this room
+    const currentRoom = clientRooms.get(socket.id);
+    if (currentRoom === roomId) {
+      console.log(`Client ${socket.id} already in room ${roomId}, ignoring duplicate join`);
+      return;
+    }
+    
+    // Leave previous room if any
+    if (currentRoom) {
+      socket.leave(currentRoom);
+    }
+    
+    console.log(`Client ${socket.id} joining room: ${roomId}`);
     socket.join(roomId);
+    clientRooms.set(socket.id, roomId);
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, createDefaultProject());
+      console.log(`Created new room: ${roomId}`);
     }
 
     const state = rooms.get(roomId)!;
@@ -95,7 +123,7 @@ io.on("connection", (socket) => {
       chat: state.chat
     };
 
-    console.log("Sending room state to client:", {
+    console.log(`Sending room state to client ${socket.id} for room ${roomId}:`, {
       filesCount: Object.keys(serializedState.files).length,
       fileTree: serializedState.fileTree,
       activeFileId: serializedState.activeFileId
@@ -106,6 +134,13 @@ io.on("connection", (socket) => {
 
     // Broadcast presence (optional)
     socket.to(roomId).emit("user-joined", { id: socket.id });
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    // Clean up tracking maps
+    clientRooms.delete(socket.id);
+    joinCooldowns.delete(socket.id);
   });
 
   // File content updates
@@ -131,10 +166,15 @@ io.on("connection", (socket) => {
 
   // Create new file
   socket.on("file-create", ({ roomId, name, parentId, type }) => {
+    console.log('Server received file-create:', { roomId, name, parentId, type });
     const state = rooms.get(roomId);
-    if (!state) return;
+    if (!state) {
+      console.log('Room not found for file creation:', roomId);
+      return;
+    }
 
     const newId = generateId();
+    console.log('Generated new file ID:', newId);
     const newFile: FileNode = {
       id: newId,
       name,
@@ -165,6 +205,7 @@ io.on("connection", (socket) => {
       state.activeFileId = newId;
     }
 
+    console.log('Emitting file-create to room:', roomId, newFile);
     io.to(roomId).emit("file-create", { file: newFile, parentId });
   });
 
@@ -226,9 +267,14 @@ io.on("connection", (socket) => {
   });
 
   socket.on("chat-message", ({ roomId, msg }) => {
+    console.log('Server received chat message:', { roomId, msg });
     const state = rooms.get(roomId);
-    if (!state) return;
+    if (!state) {
+      console.log('Room not found:', roomId);
+      return;
+    }
     state.chat.push(msg);
+    console.log('Emitting chat message to room:', roomId, msg);
     io.to(roomId).emit("chat-message", msg);
   });
 
