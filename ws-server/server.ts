@@ -16,6 +16,21 @@ type RoomState = {
   fileTree: string[]; // Root level file/folder IDs
   activeFileId: string | null;
   chat: { id: string; name: string; text: string; ts: number }[];
+  executionHistory: ExecutionHistoryItem[];
+};
+
+type ExecutionHistoryItem = {
+  id: string;
+  fileId: string;
+  fileName: string;
+  language: string;
+  code: string;
+  output: string;
+  stderr: string;
+  exitCode: number;
+  timestamp: number;
+  userId: string;
+  userName: string;
 };
 
 const server = http.createServer();
@@ -44,7 +59,8 @@ function createDefaultProject(): RoomState {
     files,
     fileTree: [welcomeFileId],
     activeFileId: welcomeFileId,
-    chat: []
+    chat: [],
+    executionHistory: []
   };
 
   console.log("Created default project:", {
@@ -120,7 +136,8 @@ io.on("connection", (socket) => {
       files: Object.fromEntries(state.files),
       fileTree: state.fileTree,
       activeFileId: state.activeFileId,
-      chat: state.chat
+      chat: state.chat,
+      executionHistory: state.executionHistory
     };
 
     console.log(`Sending room state to client ${socket.id} for room ${roomId}:`, {
@@ -315,6 +332,27 @@ io.on("connection", (socket) => {
     state.chat.push(msg);
     console.log('Emitting chat message to room:', roomId, msg);
     io.to(roomId).emit("chat-message", msg);
+  });
+
+  // Code execution event
+  socket.on("code-execute", ({ roomId, executionResult }) => {
+    console.log('Server received code execution result:', { roomId, fileId: executionResult.fileId });
+    const state = rooms.get(roomId);
+    if (!state) {
+      console.log('Room not found:', roomId);
+      return;
+    }
+    
+    // Add to execution history
+    state.executionHistory.push(executionResult);
+    
+    // Keep only last 50 executions
+    if (state.executionHistory.length > 50) {
+      state.executionHistory = state.executionHistory.slice(-50);
+    }
+    
+    console.log('Broadcasting execution result to room:', roomId);
+    io.to(roomId).emit("code-execute", executionResult);
   });
 
   socket.on("disconnect", () => {

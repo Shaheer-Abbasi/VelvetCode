@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import io from "socket.io-client";
-import type { FileNode, ChatMessage, RoomState } from './types';
+import type { FileNode, ChatMessage, RoomState, ExecutionHistoryItem } from './types';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
 
@@ -14,6 +14,7 @@ interface UseSocketProps {
   onFileDelete: (fileId: string, newActiveFileId: string | null) => void;
   onFileRename: (fileId: string, newName: string, language?: string) => void;
   onChatMessage: (message: ChatMessage) => void;
+  onCodeExecute?: (execution: ExecutionHistoryItem) => void;
 }
 
 export function useSocket({
@@ -23,7 +24,8 @@ export function useSocket({
   onFileAdd,
   onFileDelete,
   onFileRename,
-  onChatMessage
+  onChatMessage,
+  onCodeExecute
 }: UseSocketProps) {
   const socketRef = useRef<any>(null);
 
@@ -74,6 +76,13 @@ export function useSocket({
     socket.on("chat-message", (msg: ChatMessage) => {
       console.log('Received chat message:', msg);
       onChatMessage(msg);
+    });
+
+    socket.on("code-execute", (execution: ExecutionHistoryItem) => {
+      console.log('Received code execution result:', execution);
+      if (onCodeExecute) {
+        onCodeExecute(execution);
+      }
     });
 
     return () => {

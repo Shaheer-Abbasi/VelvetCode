@@ -22,6 +22,21 @@ export type RoomState = {
   fileTree: string[]; // Root level file/folder IDs
   activeFileId: string | null;
   chat: ChatMessage[];
+  executionHistory?: ExecutionHistoryItem[];
+};
+
+export type ExecutionHistoryItem = {
+  id: string;
+  fileId: string;
+  fileName: string;
+  language: string;
+  code: string;
+  output: string;
+  stderr: string;
+  exitCode: number;
+  timestamp: number;
+  userId: string;
+  userName: string;
 };
 
 export type PanelType = 'files' | 'editor' | 'chat';

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 // Import types
-import type { ChatMessage, FileNode, RoomState, PanelType } from './components/types';
+import type { ChatMessage, FileNode, RoomState, PanelType, ExecutionHistoryItem } from './components/types';
 
 // Import components directly to avoid bundling issues
 import { Resizer } from './components/Resizer';
@@ -15,7 +15,9 @@ import { FileTabs } from './components/FileTabs';
 import { ChatMessageComponent, AILoadingIndicator, ChatInput } from './components/Chat';
 import { MonacoEditorWrapper } from './components/MonacoEditorWrapper';
 import { AIActions } from './components/AIActions';
+import { CodeExecutionPanel } from './components/CodeExecutionPanel';
 import { useSocket } from './components/useSocket';
+import { executeCode } from '../../../lib/piston';
 
 export default function Room({ params }: { params: { roomId: string } }) {
   const [roomId, setRoomId] = useState<string>(params.roomId);
@@ -36,6 +38,11 @@ export default function Room({ params }: { params: { roomId: string } }) {
   const [chat, setChat] = useState<RoomState["chat"]>([]);
   const [name, setName] = useState<string>("Anon");
   const [isAILoading, setIsAILoading] = useState(false);
+  
+  // Code execution state
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionOutput, setExecutionOutput] = useState<string | null>(null);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryItem[]>([]);
   
   // File system state
   const [files, setFiles] = useState<Record<string, FileNode>>({});
@@ -112,6 +119,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
     setFileTree(state.fileTree || []);
     setActiveFileId(state.activeFileId);
     setChat(state.chat || []);
+    setExecutionHistory(state.executionHistory || []);
     
     // Set language based on active file
     if (state.activeFileId && state.files[state.activeFileId]) {
@@ -234,6 +242,20 @@ export default function Room({ params }: { params: { roomId: string } }) {
     }, 100);
   };
 
+  const handleCodeExecute = (execution: ExecutionHistoryItem) => {
+    console.log('Handling code execution:', execution);
+    setExecutionHistory(prev => [...prev, execution]);
+    
+    // Update execution output if it's for the current file
+    if (execution.fileId === activeFileId) {
+      setExecutionOutput(JSON.stringify({
+        stdout: execution.output,
+        stderr: execution.stderr,
+        code: execution.exitCode
+      }));
+    }
+  };
+
   // Initialize socket - always call the hook (Rules of Hooks)
   const socket = useSocket({
     roomId: roomId || '', // Pass empty string if roomId not ready
@@ -242,7 +264,8 @@ export default function Room({ params }: { params: { roomId: string } }) {
     onFileAdd: handleFileAdd,
     onFileDelete: handleFileDelete,
     onFileRename: handleFileRename,
-    onChatMessage: handleChatMessage
+    onChatMessage: handleChatMessage,
+    onCodeExecute: handleCodeExecute
   });
 
   // File operations
@@ -318,6 +341,68 @@ export default function Room({ params }: { params: { roomId: string } }) {
     };
     console.log('Sending chat message:', { roomId, msg });
     socket?.emit("chat-message", { roomId, msg });
+  };
+
+  const runCode = async () => {
+    if (!activeFileId || !files[activeFileId] || !editorRef.current) {
+      console.error('No active file or editor');
+      return;
+    }
+    
+    const activeFile = files[activeFileId];
+    const code = editorRef.current.getValue();
+    
+    if (!code.trim()) {
+      setExecutionOutput(JSON.stringify({
+        stdout: '',
+        stderr: 'Error: No code to execute',
+        code: 1
+      }));
+      return;
+    }
+    
+    setIsExecuting(true);
+    setExecutionOutput(null);
+    
+    try {
+      console.log('Executing code:', { language: activeFile.language, code: code.substring(0, 100) });
+      const result = await executeCode(activeFile.language || 'javascript', code);
+      
+      const executionResult: ExecutionHistoryItem = {
+        id: uuidv4(),
+        fileId: activeFileId,
+        fileName: activeFile.name,
+        language: activeFile.language || 'javascript',
+        code,
+        output: result.run.stdout,
+        stderr: result.run.stderr,
+        exitCode: result.run.code,
+        timestamp: Date.now(),
+        userId: socket?.id || 'unknown',
+        userName: name
+      };
+      
+      // Emit to server to broadcast to all clients
+      socket?.emit("code-execute", { roomId, executionResult });
+      
+      // Update local state
+      setExecutionOutput(JSON.stringify({
+        stdout: result.run.stdout,
+        stderr: result.run.stderr,
+        code: result.run.code
+      }));
+      
+      setExecutionHistory(prev => [...prev, executionResult]);
+    } catch (error: any) {
+      console.error('Code execution failed:', error);
+      setExecutionOutput(JSON.stringify({
+        stdout: '',
+        stderr: `Execution error: ${error.message}`,
+        code: 1
+      }));
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const askAI = async (action?: string) => {
@@ -553,13 +638,22 @@ export default function Room({ params }: { params: { roomId: string } }) {
                 onSelectFile={selectFile}
                 onCloseFile={closeFile}
               />
-              <MonacoEditorWrapper
-                monaco={monaco}
-                isClient={isClient}
-                language={language}
-                initialContent={editorContent}
-                onEditorReady={handleEditorReady}
-                onContentChange={handleEditorContentChange}
+              <div className="flex-1 overflow-hidden">
+                <MonacoEditorWrapper
+                  monaco={monaco}
+                  isClient={isClient}
+                  language={language}
+                  initialContent={editorContent}
+                  onEditorReady={handleEditorReady}
+                  onContentChange={handleEditorContentChange}
+                />
+              </div>
+              <CodeExecutionPanel
+                output={executionOutput}
+                isExecuting={isExecuting}
+                onRun={runCode}
+                onClear={() => setExecutionOutput(null)}
+                executionHistory={executionHistory}
               />
               <AIActions onAction={askAI} isLoading={isAILoading} />
             </div>
@@ -631,13 +725,22 @@ export default function Room({ params }: { params: { roomId: string } }) {
                 onSelectFile={selectFile}
                 onCloseFile={closeFile}
               />
-              <MonacoEditorWrapper
-                monaco={monaco}
-                isClient={isClient}
-                language={language}
-                initialContent={editorContent}
-                onEditorReady={handleEditorReady}
-                onContentChange={handleEditorContentChange}
+              <div className="flex-1 overflow-hidden">
+                <MonacoEditorWrapper
+                  monaco={monaco}
+                  isClient={isClient}
+                  language={language}
+                  initialContent={editorContent}
+                  onEditorReady={handleEditorReady}
+                  onContentChange={handleEditorContentChange}
+                />
+              </div>
+              <CodeExecutionPanel
+                output={executionOutput}
+                isExecuting={isExecuting}
+                onRun={runCode}
+                onClear={() => setExecutionOutput(null)}
+                executionHistory={executionHistory}
               />
               <AIActions onAction={askAI} isLoading={isAILoading} isMobile />
             </div>
