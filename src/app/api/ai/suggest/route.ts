@@ -35,44 +35,47 @@ export async function POST(request: NextRequest) {
     
     switch (kind) {
       case 'improve':
-        prompt = `Analyze this ${language} code and suggest improvements for better performance, readability, and best practices. Provide specific recommendations:
+        prompt = `Analyze this ${language} code and suggest improvements for better performance, readability, and best practices. Please format your response in markdown:
 
 \`\`\`${language}
 ${code}
 \`\`\`
 
-Please provide:
-1. Specific improvements
-2. Reasoning for each suggestion
-3. Updated code examples where helpful`;
+Please provide your response in **markdown format** with:
+1. **Specific improvements** with clear explanations
+2. **Reasoning** for each suggestion
+3. **Code examples** in proper code blocks
+4. Use bullet points, headers, and formatting for clarity`;
         break;
 
       case 'explain':
-        prompt = `Explain this ${language} code in a clear and concise way. Break down what it does, how it works, and any important concepts:
+        prompt = `Explain this ${language} code in a clear and concise way. Please format your response in markdown:
 
 \`\`\`${language}
 ${code}
 \`\`\`
 
-Please explain:
-1. What the code does overall
-2. Key components and their purpose
-3. Any algorithms or patterns used
-4. Potential use cases`;
+Please explain in **markdown format** with:
+1. **Overview** - What the code does overall
+2. **Key Components** - Important parts and their purpose
+3. **Algorithms/Patterns** - Any notable techniques used
+4. **Use Cases** - Potential applications
+Use headers, code blocks, and formatting for clarity.`;
         break;
 
       case 'test':
-        prompt = `Generate comprehensive unit tests for this ${language} code. Create test cases that cover different scenarios:
+        prompt = `Generate comprehensive unit tests for this ${language} code. Please format your response in markdown:
 
 \`\`\`${language}
 ${code}
 \`\`\`
 
-Please provide:
-1. Test cases for normal operation
-2. Edge cases and error conditions
-3. Mock data where needed
-4. Testing framework appropriate for ${language}`;
+Please provide in **markdown format** with:
+1. **Test Cases** for normal operation
+2. **Edge Cases** and error conditions
+3. **Mock Data** examples where needed
+4. **Testing Framework** recommendations for ${language}
+Use proper code blocks and clear formatting.`;
         break;
 
       default:
@@ -93,7 +96,8 @@ Please provide:
     return NextResponse.json({
       message: text,
       kind,
-      language
+      language,
+      isAI: true
     });
 
   } catch (error) {

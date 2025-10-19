@@ -24,3 +24,95 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Markdown content styling for chat */
+.markdown-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown-content pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.markdown-content code {
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* Syntax highlighting adjustments for dark theme */
+.hljs {
+  background: #1e1e1e !important;
+  color: #d4d4d4 !important;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  width: 100%;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  border: 1px solid #374151;
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+}
+
+.markdown-content table th {
+  background-color: #374151;
+  font-weight: 600;
+}
+
+/* Custom animations for homepage */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spin-slower {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+.animate-spin-slower {
+  animation: spin-slower 30s linear infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 4s ease-in-out infinite;
+}

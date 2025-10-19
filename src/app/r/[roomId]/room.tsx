@@ -1,336 +1,779 @@
 // app/r/[roomId]/room.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import io from "socket.io-client";
-import type { Socket } from "socket.io-client";
+import { useEffect, useRef, useState, Suspense, lazy } from "react";
 import { v4 as uuidv4 } from "uuid";
-import dynamic from "next/dynamic";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:4000";
+// Import types
+import type { ChatMessage, FileNode, RoomState, PanelType, ExecutionHistoryItem } from './components/types';
 
-type ChatMessage = { id: string; name: string; text: string; ts: number };
-
-type RoomState = {
-  code: string;
-  language: string;
-  chat: ChatMessage[];
-};
+// Import components directly to avoid bundling issues
+import { Resizer } from './components/Resizer';
+import { MobilePanelSelector } from './components/MobilePanelSelector';
+import { FileExplorer } from './components/FileExplorer';
+import { FileTabs } from './components/FileTabs';
+import { ChatMessageComponent, AILoadingIndicator, ChatInput } from './components/Chat';
+import { MonacoEditorWrapper } from './components/MonacoEditorWrapper';
+import { AIActions } from './components/AIActions';
+import { CodeExecutionPanel } from './components/CodeExecutionPanel';
+import { useSocket } from './components/useSocket';
+import { executeCode } from '../../../lib/piston';
 
 export default function Room({ params }: { params: { roomId: string } }) {
-  const { roomId } = params;
+  const [roomId, setRoomId] = useState<string>(params.roomId);
+  
+  // Room ID is now directly available from params
+  useEffect(() => {
+    console.log('Room ID:', params.roomId);
+    setRoomId(params.roomId);
+  }, [params.roomId]);
+  
+  console.log('Room component initialized with roomId:', roomId);
+  
   const editorRef = useRef<any>(null);
-  const monacoEl = useRef<HTMLDivElement | null>(null);
-  const socketRef = useRef<typeof Socket | null>(null);
   const [monaco, setMonaco] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
 
   const [language, setLanguage] = useState("javascript");
   const [chat, setChat] = useState<RoomState["chat"]>([]);
   const [name, setName] = useState<string>("Anon");
+  const [isAILoading, setIsAILoading] = useState(false);
+  
+  // Code execution state
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionOutput, setExecutionOutput] = useState<string | null>(null);
+  const [executionHistory, setExecutionHistory] = useState<ExecutionHistoryItem[]>([]);
+  
+  // File system state
+  const [files, setFiles] = useState<Record<string, FileNode>>({});
+  const [fileTree, setFileTree] = useState<string[]>([]);
+  const [activeFileId, setActiveFileId] = useState<string | null>(null);
+  const [openFiles, setOpenFiles] = useState<string[]>([]); // Tabs for open files
+  
+  // Panel sizing state
+  const [leftPanelWidth, setLeftPanelWidth] = useState(300); // File explorer width
+  const [rightPanelWidth, setRightPanelWidth] = useState(350); // Chat panel width
+  const [isMobile, setIsMobile] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelType>('editor'); // Mobile active panel
+  const isUpdatingFromRemoteRef = useRef(false);
+  const lastRemoteContentRef = useRef("");
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load Monaco Editor only on client side
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768); // md breakpoint
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Load Monaco Editor lazily - only when really needed
   useEffect(() => {
     setIsClient(true);
+    
+    // Don't load Monaco until user actually needs the editor
+    if (monaco || (isMobile && activePanel !== 'editor')) return;
+    
     const loadMonaco = async () => {
       try {
-        // Set up Monaco Environment with getWorker instead of getWorkerUrl
+        // Setup Monaco Environment before importing
         (window as any).MonacoEnvironment = {
-          getWorker: function (workerId: string, label: string) {
-            // Create a more complete worker blob
+          getWorker: function () {
+            // Return a minimal worker that handles basic operations
             const workerCode = `
-              // Simple worker implementation
-              let initialized = false;
-              
               self.addEventListener('message', function(e) {
-                const { id, method, params } = e.data;
-                
-                // Initialize response
-                if (!initialized) {
-                  initialized = true;
-                  self.postMessage({ type: 'initialized' });
-                }
-                
-                // Handle common Monaco worker methods
-                switch (method) {
-                  case 'initialize':
-                    self.postMessage({ id, result: true });
-                    break;
-                  case 'getSemanticDiagnostics':
-                  case 'getSyntacticDiagnostics':
-                  case 'getSuggestionDiagnostics':
-                    self.postMessage({ id, result: [] });
-                    break;
-                  case 'getCompletionItems':
-                    self.postMessage({ id, result: { suggestions: [] } });
-                    break;
-                  case 'getSignatureHelp':
-                    self.postMessage({ id, result: null });
-                    break;
-                  case 'getQuickInfo':
-                    self.postMessage({ id, result: null });
-                    break;
-                  case 'getDefinition':
-                  case 'getReferences':
-                    self.postMessage({ id, result: [] });
-                    break;
-                  default:
-                    // Default response for unknown methods
-                    self.postMessage({ id, result: null });
-                }
-              });
-              
-              // Handle errors
-              self.addEventListener('error', function(e) {
-                console.log('Worker error:', e);
+                const { id } = e.data;
+                self.postMessage({ id, result: null });
               });
             `;
-            
             const blob = new Blob([workerCode], { type: 'application/javascript' });
-            const blobUrl = URL.createObjectURL(blob);
-            const worker = new Worker(blobUrl);
-            
-            // Clean up blob URL after worker is created
-            worker.addEventListener('message', () => {
-              URL.revokeObjectURL(blobUrl);
-            }, { once: true });
-            
-            return worker;
+            return new Worker(URL.createObjectURL(blob));
           }
         };
 
+        // Import Monaco with environment setup
         const monacoEditor = await import("monaco-editor");
         setMonaco(monacoEditor);
       } catch (error) {
         console.error('Failed to load Monaco Editor:', error);
       }
     };
-    loadMonaco();
-  }, []);
-
-  // Connect WS
-  useEffect(() => {
-    const socket = io(WS_URL, { transports: ["websocket"] });
-    socketRef.current = socket;
-
-    socket.emit("join-room", { roomId });
-
-    socket.on("room-state", (state: RoomState) => {
-      setLanguage(state.language);
-      setChat(state.chat);
-      if (editorRef.current) {
-        editorRef.current.setValue(state.code || "");
-      }
-    });
-
-    socket.on("code-update", ({ code }: { code: string }) => {
-      if (editorRef.current && editorRef.current.getValue() !== code) {
-        const cur = editorRef.current.getPosition();
-        editorRef.current.setValue(code);
-        if (cur) editorRef.current.setPosition(cur);
-      }
-    });
-
-    socket.on("language-change", ({ language }: { language: string }) => {
-      setLanguage(language);
-      if (editorRef.current && monaco) {
-        const model = editorRef.current.getModel();
-        if (model) monaco.editor.setModelLanguage(model, language);
-      }
-    });
-
-    socket.on("chat-message", (msg: ChatMessage) => {
-      setChat((c) => [...c, msg]);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [roomId]);
-
-  // Init Monaco
-  useEffect(() => {
-    if (!monacoEl.current || !monaco || !isClient) return;
     
-    try {
-      // Dispose existing editor if it exists
-      if (editorRef.current) {
-        editorRef.current.dispose();
+    // Load after a delay to prioritize initial page render
+    const timeoutId = setTimeout(loadMonaco, 1000); // Increased delay
+    return () => clearTimeout(timeoutId);
+  }, [isMobile, activePanel, monaco]);
+
+  // Socket handlers
+  const handleRoomState = (state: RoomState) => {
+    console.log('Handling room state:', state);
+    console.log('Files received:', Object.keys(state.files || {}).length);
+    console.log('File tree:', state.fileTree);
+    console.log('Active file ID:', state.activeFileId);
+    
+    setFiles(state.files || {});
+    setFileTree(state.fileTree || []);
+    setActiveFileId(state.activeFileId);
+    setChat(state.chat || []);
+    setExecutionHistory(state.executionHistory || []);
+    
+    // Set language based on active file
+    if (state.activeFileId && state.files[state.activeFileId]) {
+      const activeFile = state.files[state.activeFileId];
+      if (activeFile.type === "file" && activeFile.language) {
+        setLanguage(activeFile.language);
+      }
+    }
+    
+    // Add active file to open files if not already there (use callback to avoid dependency)
+    if (state.activeFileId) {
+      setOpenFiles(prev => {
+        if (!prev.includes(state.activeFileId!)) {
+          return [...prev, state.activeFileId!];
+        }
+        return prev;
+      });
+    }
+  };
+
+  const handleFileUpdate = (fileId: string, content: string) => {
+    if (isUpdatingFromRemoteRef.current) return;
+    
+    setFiles(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], content }
+    }));
+    
+    // Update editor if this is the active file
+    if (fileId === activeFileId && editorRef.current) {
+      const currentContent = editorRef.current.getValue();
+      if (currentContent !== content) {
+        isUpdatingFromRemoteRef.current = true;
+        lastRemoteContentRef.current = content;
+        editorRef.current.setValue(content);
+        setTimeout(() => { 
+          isUpdatingFromRemoteRef.current = false; 
+        }, 100);
+      }
+    }
+  };
+
+  const handleFileAdd = (file: FileNode, parentId?: string) => {
+    setFiles(prev => ({ ...prev, [file.id]: file }));
+    
+    if (parentId) {
+      setFiles(prev => ({
+        ...prev,
+        [parentId]: {
+          ...prev[parentId],
+          children: [...(prev[parentId].children || []), file.id]
+        }
+      }));
+    } else {
+      setFileTree(prev => [...prev, file.id]);
+    }
+    
+    // If it's a file, select it
+    if (file.type === "file") {
+      setActiveFileId(file.id);
+      setLanguage(file.language || "javascript");
+      setOpenFiles(prev => [...prev, file.id]);
+    }
+  };
+
+  const handleFileDelete = (fileId: string, newActiveFileId: string | null) => {
+    // Remove from files
+    setFiles(prev => {
+      const newFiles = { ...prev };
+      delete newFiles[fileId];
+      return newFiles;
+    });
+    
+    // Remove from open files
+    setOpenFiles(prev => prev.filter(id => id !== fileId));
+    
+    // Update active file
+    setActiveFileId(newActiveFileId);
+    if (newActiveFileId && files[newActiveFileId]) {
+      const newActiveFile = files[newActiveFileId];
+      setLanguage(newActiveFile.language || "javascript");
+    }
+  };
+
+  const handleFileRename = (fileId: string, newName: string, newLanguage?: string) => {
+    setFiles(prev => ({
+      ...prev,
+      [fileId]: {
+        ...prev[fileId],
+        name: newName,
+        ...(newLanguage ? { language: newLanguage } : {})
+      }
+    }));
+    
+    // Update language if this is the active file
+    if (fileId === activeFileId && newLanguage) {
+      setLanguage(newLanguage);
+    }
+  };
+
+  const handleChatMessage = (msg: ChatMessage) => {
+    console.log('Handling chat message:', msg);
+    
+    // Ensure message has required properties
+    if (!msg || !msg.id || !msg.name || !msg.text) {
+      console.warn('Invalid chat message received:', msg);
+      return;
+    }
+    
+    setChat((c) => {
+      console.log('Current chat:', c, 'Adding message:', msg);
+      return [...c, msg];
+    });
+    
+    // Scroll to bottom when new message arrives
+    setTimeout(() => {
+      if (chatContainerRef.current) {
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  const handleCodeExecute = (execution: ExecutionHistoryItem) => {
+    console.log('Handling code execution:', execution);
+    setExecutionHistory(prev => [...prev, execution]);
+    
+    // Update execution output if it's for the current file
+    if (execution.fileId === activeFileId) {
+      setExecutionOutput(JSON.stringify({
+        stdout: execution.output,
+        stderr: execution.stderr,
+        code: execution.exitCode
+      }));
+    }
+  };
+
+  // Initialize socket - always call the hook (Rules of Hooks)
+  const socket = useSocket({
+    roomId: roomId || '', // Pass empty string if roomId not ready
+    onRoomState: handleRoomState,
+    onFileUpdate: handleFileUpdate,
+    onFileAdd: handleFileAdd,
+    onFileDelete: handleFileDelete,
+    onFileRename: handleFileRename,
+    onChatMessage: handleChatMessage,
+    onCodeExecute: handleCodeExecute
+  });
+
+  // File operations
+  const selectFile = (fileId: string) => {
+    const file = files[fileId];
+    if (!file || file.type !== "file") return;
+    
+    // Update state immediately for responsive UI
+    setActiveFileId(fileId);
+    setLanguage(file.language || "javascript");
+    
+    // Add to open files if not already there
+    if (!openFiles.includes(fileId)) {
+      setOpenFiles(prev => [...prev, fileId]);
+    }
+    
+    // Emit to server
+    socket?.emit("set-active-file", { roomId, fileId });
+  };
+
+  const closeFile = (fileId: string) => {
+    setOpenFiles(prev => prev.filter(id => id !== fileId));
+    
+    // If closing the active file, switch to another open file or null
+    if (fileId === activeFileId) {
+      const remainingFiles = openFiles.filter(id => id !== fileId);
+      const newActiveFileId = remainingFiles.length > 0 ? remainingFiles[remainingFiles.length - 1] : null;
+      setActiveFileId(newActiveFileId);
+      
+      if (newActiveFileId && files[newActiveFileId]) {
+        setLanguage(files[newActiveFileId].language || "javascript");
       }
       
-      const editor = monaco.editor.create(monacoEl.current, {
-        value: "// Start typing together...\n",
-        language,
-        automaticLayout: true,
-        minimap: { enabled: false },
-        fontSize: 14,
-        theme: "vs-dark",
-        // Disable features that might cause worker issues
-        wordWrap: 'on',
-        glyphMargin: false,
-        folding: false,
-        lineDecorationsWidth: 0,
-        lineNumbersMinChars: 3,
-        renderLineHighlight: 'none',
-      });
-      editorRef.current = editor;
-
-      const sub = editor.onDidChangeModelContent(() => {
-        try {
-          const code = editor.getValue();
-          socketRef.current?.emit("code-update", { roomId, code });
-        } catch (error) {
-          console.error('Error getting editor value:', error);
-        }
-      });
-
-      return () => {
-        try {
-          sub.dispose();
-          editor.dispose();
-        } catch (error) {
-          console.error('Error disposing editor:', error);
-        }
-      };
-    } catch (error) {
-      console.error('Error creating Monaco editor:', error);
+      socket?.emit("set-active-file", { roomId, fileId: newActiveFileId });
     }
-  }, [monaco, language, roomId, isClient]);
+  };
 
-  // Change language
-  function handleLangChange(e: React.ChangeEvent<HTMLSelectElement>) {
+  const createFile = (name: string, parentId?: string) => {
+    console.log('Creating file:', { name, parentId, roomId });
+    socket?.emit("file-create", { roomId, name, type: "file", parentId });
+  };
+
+  const createFolder = (name: string, parentId?: string) => {
+    console.log('Creating folder:', { name, parentId, roomId });
+    socket?.emit("file-create", { roomId, name, type: "folder", parentId });
+  };
+
+  const uploadFile = (name: string, content: string, parentId?: string) => {
+    console.log('Uploading file:', { name, parentId, roomId });
+    socket?.emit("file-upload", { roomId, name, content, parentId });
+  };
+
+  const deleteFile = (fileId: string) => {
+    socket?.emit("file-delete", { roomId, fileId });
+  };
+
+  const renameFile = (fileId: string, newName: string) => {
+    const language = newName.split('.').pop() === 'ts' ? 'typescript' : 
+                    newName.split('.').pop() === 'py' ? 'python' :
+                    newName.split('.').pop() === 'html' ? 'html' :
+                    newName.split('.').pop() === 'css' ? 'css' : 'javascript';
+    
+    socket?.emit("file-rename", { roomId, fileId, newName, language });
+  };
+
+  const sendChat = (text: string) => {
+    if (!text.trim()) return;
+    const msg = {
+      id: uuidv4(),
+      name,
+      text,
+      ts: Date.now()
+    };
+    console.log('Sending chat message:', { roomId, msg });
+    socket?.emit("chat-message", { roomId, msg });
+  };
+
+  const runCode = async () => {
+    if (!activeFileId || !files[activeFileId] || !editorRef.current) {
+      console.error('No active file or editor');
+      return;
+    }
+    
+    const activeFile = files[activeFileId];
+    const code = editorRef.current.getValue();
+    
+    if (!code.trim()) {
+      setExecutionOutput(JSON.stringify({
+        stdout: '',
+        stderr: 'Error: No code to execute',
+        code: 1
+      }));
+      return;
+    }
+    
+    setIsExecuting(true);
+    setExecutionOutput(null);
+    
     try {
-      const lang = e.target.value;
-      setLanguage(lang);
-      if (monaco && editorRef.current) {
-        const model = editorRef.current.getModel();
-        if (model) monaco.editor.setModelLanguage(model, lang);
-      }
-      socketRef.current?.emit("language-change", { roomId, language: lang });
-    } catch (error) {
-      console.error('Error changing language:', error);
+      console.log('Executing code:', { language: activeFile.language, code: code.substring(0, 100) });
+      const result = await executeCode(activeFile.language || 'javascript', code);
+      
+      const executionResult: ExecutionHistoryItem = {
+        id: uuidv4(),
+        fileId: activeFileId,
+        fileName: activeFile.name,
+        language: activeFile.language || 'javascript',
+        code,
+        output: result.run.stdout,
+        stderr: result.run.stderr,
+        exitCode: result.run.code,
+        timestamp: Date.now(),
+        userId: socket?.id || 'unknown',
+        userName: name
+      };
+      
+      // Emit to server to broadcast to all clients
+      socket?.emit("code-execute", { roomId, executionResult });
+      
+      // Update local state
+      setExecutionOutput(JSON.stringify({
+        stdout: result.run.stdout,
+        stderr: result.run.stderr,
+        code: result.run.code
+      }));
+      
+      setExecutionHistory(prev => [...prev, executionResult]);
+    } catch (error: any) {
+      console.error('Code execution failed:', error);
+      setExecutionOutput(JSON.stringify({
+        stdout: '',
+        stderr: `Execution error: ${error.message}`,
+        code: 1
+      }));
+    } finally {
+      setIsExecuting(false);
     }
-  }
+  };
 
-  // Chat
-  function sendChat(text: string) {
-    const msg = { id: uuidv4(), name: name || "Anon", text, ts: Date.now() };
-    socketRef.current?.emit("chat-message", { roomId, msg });
-    // Don't add to local state - let it come back from server to avoid duplicates
-  }
+  const askAI = async (action?: string) => {
+    if (!activeFileId || !files[activeFileId] || !editorRef.current) return;
+    
+    const activeFile = files[activeFileId];
+    const code = editorRef.current.getValue();
+    
+    setIsAILoading(true);
+    
+    try {
+      const response = await fetch('/api/ai/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          kind: action, // 'improve', 'explain', or 'test'
+          language: activeFile.language || 'javascript',
+          code: code
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'AI request failed');
+      }
+      
+      const { message } = await response.json(); // API returns 'message', not 'suggestion'
+      
+      // Send AI response as chat message
+      const aiMessage: ChatMessage = {
+        id: uuidv4(),
+        name: 'AI Agent',
+        text: message,
+        ts: Date.now()
+      };
+      
+      socket?.emit("chat-message", { roomId, msg: aiMessage });
+    } catch (error) {
+      console.error('AI request failed:', error);
+    } finally {
+      setIsAILoading(false);
+    }
+  };
 
-  async function askAI(kind: "improve" | "explain" | "test") {
-    const code = editorRef.current?.getValue() || "";
-    const res = await fetch("/api/ai/suggest", {
-      method: "POST",
-      body: JSON.stringify({ kind, language, code }),
+  const askAIDirectly = async (prompt: string) => {
+    if (!prompt.trim()) return;
+    
+    setIsAILoading(true);
+    
+    // Add user's question to chat
+    const userMessage: ChatMessage = {
+      id: uuidv4(),
+      name: name,
+      text: prompt,
+      ts: Date.now()
+    };
+    socket?.emit("chat-message", { roomId, msg: userMessage });
+    
+    try {
+      // Get context from active file if available
+      const context = activeFileId && files[activeFileId] 
+        ? { language: files[activeFileId].language || 'javascript' }
+        : undefined;
+      
+      const response = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, context }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'AI request failed');
+      }
+      
+      const { message } = await response.json();
+      
+      // Send AI response as chat message
+      const aiMessage: ChatMessage = {
+        id: uuidv4(),
+        name: 'AI Agent',
+        text: message,
+        ts: Date.now()
+      };
+      
+      socket?.emit("chat-message", { roomId, msg: aiMessage });
+    } catch (error) {
+      console.error('AI chat request failed:', error);
+      
+      // Send error message to chat
+      const errorMessage: ChatMessage = {
+        id: uuidv4(),
+        name: 'AI Agent',
+        text: 'Sorry, I encountered an error. Please try again.',
+        ts: Date.now()
+      };
+      socket?.emit("chat-message", { roomId, msg: errorMessage });
+    } finally {
+      setIsAILoading(false);
+    }
+  };
+
+  const handleEditorReady = (editor: any) => {
+    console.log('Editor ready:', editor);
+    console.log('Editor options:', {
+      readOnly: editor.getOption('readOnly'),
+      domReadOnly: editor.getOption('domReadOnly'),
+      language: editor.getModel()?.getLanguageId(),
+      value: editor.getValue()?.substring(0, 100) + '...'
     });
-    const data = await res.json();
-    sendChat(data.message); // drop AI result into chat
+    editorRef.current = editor;
+    
+    // Ensure editor is focused and editable
+    setTimeout(() => {
+      if (editor) {
+        editor.focus();
+        console.log('Editor focused, readOnly:', editor.getOption('readOnly'));
+        console.log('Can editor receive typing?', !editor.getOption('readOnly') && !editor.getOption('domReadOnly'));
+      }
+    }, 100);
+  };
+
+  const handleEditorContentChange = (content: string) => {
+    console.log('Editor content changed:', { content: content.length, activeFileId, isUpdating: isUpdatingFromRemoteRef.current });
+    
+    if (isUpdatingFromRemoteRef.current || !activeFileId) {
+      console.log('Skipping content change - updating from remote or no active file');
+      return;
+    }
+    
+    if (updateTimeoutRef.current) {
+      clearTimeout(updateTimeoutRef.current);
+    }
+    
+    updateTimeoutRef.current = setTimeout(() => {
+      if (!isUpdatingFromRemoteRef.current && activeFileId && content !== lastRemoteContentRef.current) {
+        console.log('Emitting file-update to socket');
+        socket?.emit("file-update", { roomId, fileId: activeFileId, content });
+        
+        setFiles(prev => ({
+          ...prev,
+          [activeFileId]: { ...prev[activeFileId], content }
+        }));
+      }
+    }, 100);
+  };
+
+  // Get current file content for editor
+  const activeFile = activeFileId ? files[activeFileId] : null;
+  const editorContent = activeFile?.content || "// Welcome to VelvetCode!\n// Select or create a file to start coding...\n";
+  
+  console.log('Editor rendering with:', {
+    activeFileId,
+    hasActiveFile: !!activeFile,
+    activeFileName: activeFile?.name,
+    contentLength: editorContent.length,
+    content: editorContent.substring(0, 50) + '...'
+  });
+
+  // Show loading until roomId is resolved
+  if (!roomId) {
+    return (
+      <div className="h-screen bg-gradient-to-br from-gray-950 via-red-950/20 to-gray-950 text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-3 border-red-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="text-white/90 text-lg font-medium">Loading room...</div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full h-screen grid grid-rows-[auto_1fr_auto] bg-black text-white">
-      {/* Top Bar */}
-      <div className="flex items-center gap-4 p-3 border-b border-white/10">
-        <div className="text-sm opacity-70">Room: {roomId}</div>
-        <select
-          className="bg-neutral-900 px-2 py-1 rounded"
-          value={language}
-          onChange={handleLangChange}
-        >
-          <option value="javascript">javascript</option>
-          <option value="typescript">typescript</option>
-          <option value="python">python</option>
-          <option value="cpp">cpp</option>
-          <option value="java">java</option>
-        </select>
-        <div className="ml-auto flex items-center gap-2">
-          <input
-            className="bg-neutral-900 px-2 py-1 rounded"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
-            onClick={() => askAI("improve")}
-          >
-            AI: Improve
-          </button>
-          <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
-            onClick={() => askAI("explain")}
-          >
-            AI: Explain
-          </button>
-          <button
-            className="bg-white/10 px-3 py-1 rounded hover:bg-white/20"
-            onClick={() => askAI("test")}
-          >
-            AI: Tests
-          </button>
-        </div>
-      </div>
-
-      {/* Main */}
-      <div className="grid grid-cols-3 gap-0">
-        <div className="col-span-2 relative">
-          {!monaco || !isClient ? (
-            <div className="w-full h-full flex items-center justify-center bg-neutral-900">
-              <div className="text-white/70">Loading editor...</div>
-            </div>
-          ) : (
-            <div ref={monacoEl} className="w-full h-full" />
-          )}
-        </div>
-        <div className="col-span-1 border-l border-white/10 flex flex-col">
-          <div className="p-3 text-sm font-semibold">Chat</div>
-          <div className="flex-1 overflow-auto px-3 space-y-2">
-            {chat.map((m) => (
-              <div key={m.id} className="text-sm">
-                <span className="font-semibold">{m.name}: </span>
-                <span className="opacity-90 whitespace-pre-wrap">{m.text}</span>
-              </div>
-            ))}
+    <div className="h-screen bg-gradient-to-br from-gray-950 via-red-950/20 to-gray-950 text-white flex flex-col">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-gray-900 via-red-950/30 to-gray-900 px-6 py-3 border-b border-red-500/20 shadow-lg shadow-red-500/5">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold bg-gradient-to-r from-red-400 to-red-600 bg-clip-text text-transparent">
+            VelvetCode
+          </h1>
+          <div className="text-sm text-red-400/80 font-medium px-3 py-1 bg-red-500/10 rounded-full border border-red-500/20">
+            Room: {roomId}
           </div>
-          <ChatInput onSend={(t) => t && sendChat(t)} />
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="text-xs p-2 opacity-60 border-t border-white/10">
-        Built at the hackathon ✨
-      </div>
-    </div>
-  );
-}
+      {/* Mobile Panel Selector */}
+      {isMobile && (
+        <MobilePanelSelector
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          fileCount={fileTree.length}
+          chatCount={chat.length}
+        />
+      )}
 
-function ChatInput({ onSend }: { onSend: (t: string) => void }) {
-  const [text, setText] = useState("");
-  return (
-    <div className="p-2 flex gap-2 border-t border-white/10">
-      <input
-        className="flex-1 bg-neutral-900 px-3 py-2 rounded"
-        placeholder="Type a message..."
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            onSend(text.trim());
-            setText("");
-          }
-        }}
-      />
-      <button
-        className="bg-white/10 px-3 py-2 rounded hover:bg-white/20"
-        onClick={() => {
-          onSend(text.trim());
-          setText("");
-        }}
-      >
-        Send
-      </button>
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {!isMobile ? (
+          /* Desktop Layout */
+          <>
+            {/* Left Panel - File Explorer */}
+            <div 
+              className="flex-shrink-0 border-r border-red-500/20 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden"
+              style={{ width: `${leftPanelWidth}px` }}
+            >
+              <FileExplorer
+                files={files}
+                fileTree={fileTree}
+                activeFileId={activeFileId}
+                onSelectFile={selectFile}
+                onCreateFile={createFile}
+                onCreateFolder={createFolder}
+                onDeleteFile={deleteFile}
+                onRenameFile={renameFile}
+                onUploadFile={uploadFile}
+              />
+            </div>
+
+            {/* Left Resizer */}
+            <Resizer
+              onResize={(delta) => {
+                setLeftPanelWidth(prev => Math.max(200, Math.min(600, prev + delta)));
+              }}
+              direction="horizontal"
+            />
+
+            {/* Center Panel - Editor */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <FileTabs
+                openFiles={openFiles}
+                activeFileId={activeFileId}
+                files={files}
+                onSelectFile={selectFile}
+                onCloseFile={closeFile}
+              />
+              <div className="flex-1 overflow-hidden">
+                <MonacoEditorWrapper
+                  monaco={monaco}
+                  isClient={isClient}
+                  language={language}
+                  initialContent={editorContent}
+                  onEditorReady={handleEditorReady}
+                  onContentChange={handleEditorContentChange}
+                />
+              </div>
+              <CodeExecutionPanel
+                output={executionOutput}
+                isExecuting={isExecuting}
+                onRun={runCode}
+                onClear={() => setExecutionOutput(null)}
+                executionHistory={executionHistory}
+              />
+              <AIActions onAction={askAI} isLoading={isAILoading} />
+            </div>
+
+            {/* Right Resizer */}
+            <Resizer
+              onResize={(delta) => {
+                setRightPanelWidth(prev => Math.max(250, Math.min(600, prev - delta)));
+              }}
+              direction="horizontal"
+            />
+
+            {/* Right Panel - Chat */}
+            <div 
+              className="flex-shrink-0 border-l border-red-500/20 bg-gray-900/50 backdrop-blur-sm flex flex-col overflow-hidden"
+              style={{ width: `${rightPanelWidth}px` }}
+            >
+              <div className="p-3 text-sm font-semibold border-b border-red-500/20 bg-gradient-to-r from-red-950/30 to-transparent flex-shrink-0 flex items-center justify-between">
+                <span className="text-red-400">Chat</span>
+                <input
+                  className="bg-gray-900 border border-red-500/30 px-3 py-1 rounded-lg text-xs w-24 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 transition-all"
+                  placeholder="Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+              <div 
+                ref={chatContainerRef}
+                className="flex-1 overflow-auto px-3 py-2 space-y-2"
+              >
+                {chat.filter(m => m && m.id).map((m) => (
+                  <ChatMessageComponent key={m.id} message={m} />
+                ))}
+                {isAILoading && <AILoadingIndicator />}
+              </div>
+              <div className="flex-shrink-0">
+                <ChatInput onSend={sendChat} onAskAI={askAIDirectly} />
+              </div>
+            </div>
+          </>
+        ) : (
+          /* Mobile Layout */
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {activePanel === 'files' && (
+              <div className="flex-1 overflow-hidden">
+                <FileExplorer
+                  files={files}
+                  fileTree={fileTree}
+                  activeFileId={activeFileId}
+                  onSelectFile={(fileId) => {
+                    selectFile(fileId);
+                    setActivePanel('editor');
+                  }}
+                  onCreateFile={createFile}
+                  onCreateFolder={createFolder}
+                  onDeleteFile={deleteFile}
+                  onRenameFile={renameFile}
+                  onUploadFile={uploadFile}
+                />
+              </div>
+            )}
+
+            {/* Editor Panel - Keep mounted but conditionally visible */}
+            <div className={`flex-1 flex flex-col overflow-hidden ${activePanel === 'editor' ? '' : 'hidden'}`}>
+              <FileTabs
+                openFiles={openFiles}
+                activeFileId={activeFileId}
+                files={files}
+                onSelectFile={selectFile}
+                onCloseFile={closeFile}
+              />
+              <div className="flex-1 overflow-hidden">
+                <MonacoEditorWrapper
+                  monaco={monaco}
+                  isClient={isClient}
+                  language={language}
+                  initialContent={editorContent}
+                  onEditorReady={handleEditorReady}
+                  onContentChange={handleEditorContentChange}
+                />
+              </div>
+              <CodeExecutionPanel
+                output={executionOutput}
+                isExecuting={isExecuting}
+                onRun={runCode}
+                onClear={() => setExecutionOutput(null)}
+                executionHistory={executionHistory}
+              />
+              <AIActions onAction={askAI} isLoading={isAILoading} isMobile />
+            </div>
+
+            {/* Chat Panel */}
+            {activePanel === 'chat' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-3 text-sm font-semibold border-b border-red-500/20 bg-gradient-to-r from-red-950/30 to-transparent flex-shrink-0 flex items-center justify-between">
+                  <span className="text-red-400">Chat</span>
+                  <input
+                    className="bg-gray-900 border border-red-500/30 px-3 py-1 rounded-lg text-xs w-24 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/30 transition-all"
+                    placeholder="Name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </div>
+                <div 
+                  ref={chatContainerRef}
+                  className="flex-1 overflow-auto px-3 py-2 space-y-2"
+                >
+                  {chat.filter(m => m && m.id).map((m) => (
+                    <ChatMessageComponent key={m.id} message={m} />
+                  ))}
+                  {isAILoading && <AILoadingIndicator />}
+                </div>
+                <div className="flex-shrink-0">
+                  <ChatInput onSend={sendChat} onAskAI={askAIDirectly} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
