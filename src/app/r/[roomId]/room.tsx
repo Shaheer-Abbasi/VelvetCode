@@ -216,7 +216,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
   function sendChat(text: string) {
     const msg = { id: uuidv4(), name: name || "Anon", text, ts: Date.now() };
     socketRef.current?.emit("chat-message", { roomId, msg });
-    setChat((c) => [...c, msg]);
+    // Don't add to local state - let it come back from server to avoid duplicates
   }
 
   async function askAI(kind: "improve" | "explain" | "test") {
