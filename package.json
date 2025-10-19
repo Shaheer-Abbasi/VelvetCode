@@ -10,6 +10,10 @@
     "ws": "ts-node --transpile-only ws-server/server.ts"
   },
   "dependencies": {
+    "-": "^0.0.1",
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
+    "@monaco-editor/react": "^4.7.0",
     "monaco-editor": "^0.54.0",
     "next": "15.5.6",
     "react": "19.1.0",
@@ -21,14 +25,16 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.1.14",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/socket.io-client": "^1.4.36",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
-    "tailwindcss": "^4",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.14",
     "typescript": "^5"
   }
 }
