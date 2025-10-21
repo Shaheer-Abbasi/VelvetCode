@@ -9,8 +9,8 @@
 
 ---
 
-![Home Page Picture](velvetcode-frontpage.png)
-![Chat Room Picture](velvetcode-chatroom.png)
+![Home Page Picture](velvetcode-frontpage.PNG)
+![Chat Room Picture](velvetcode-chatroom.PNG)
 
 ## Features
 
