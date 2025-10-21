@@ -9,6 +9,9 @@
 
 ---
 
+![Home Page Picture](velvetcode-frontpage.png)
+![Chat Room Picture](velvetcode-chatroom.png)
+
 ## Features
 
 ### **Real-time Collaboration**
