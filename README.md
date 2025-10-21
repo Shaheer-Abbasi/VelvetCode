@@ -1,4 +1,4 @@
-# 🚀 VelvetCode
+# VelvetCode
 
 **VelvetCode** is a collaborative real-time code editor with AI-powered features, built with Next.js, Monaco Editor, Socket.io, and Google Gemini API.
 
@@ -9,31 +9,31 @@
 
 ---
 
-## ✨ Features
+## Features
 
-### 🎨 **Real-time Collaboration**
+### **Real-time Collaboration**
 - **Live Code Sync**: Multiple users can edit the same file simultaneously
 - **WebSocket Integration**: Instant updates across all connected clients
 - **User Presence**: See who's currently in the room
 
-### 🤖 **AI-Powered Assistant**
+### **AI-Powered Assistant**
 - **Code Improvement**: Get AI suggestions to improve your code
 - **Code Explanation**: Understand complex code with AI explanations
 - **Test Generation**: Automatically generate unit tests
 - **Direct Chat**: Ask the AI anything in a dedicated chat interface
 - **Powered by Google Gemini 2.0 Flash Exp**
 
-### 💻 **Code Execution**
+### **Code Execution**
 - **Run Code in Browser**: Execute code in 19+ languages using [Piston API](https://github.com/engineer-man/piston)
 - **Supported Languages**: JavaScript, TypeScript, Python, Java, C++, C, C#, Go, Rust, PHP, Ruby, Swift, Kotlin, Scala, R, Bash, Lua, Perl, Haskell
 - **Execution History**: View previous code executions
 
-### 📁 **File Management**
+### **File Management**
 - **File Explorer**: Create, rename, and organize files/folders
 - **File Upload**: Drag-and-drop or upload files
 - **Monaco Editor**: VS Code-like editing experience with syntax highlighting
 
-### 🎨 **Modern UI/UX**
+### **Modern UI/UX**
 - **Red/Black Theme**: Sleek, modern design
 - **Responsive**: Works on desktop and mobile
 - **Split Panels**: Resizable file explorer, editor, and chat panels
@@ -41,7 +41,7 @@
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: Next.js 15.5.6 (App Router), React 19, TypeScript
 - **Editor**: Monaco Editor 0.54.0
@@ -97,19 +97,6 @@ npm run dev
 ```
 http://localhost:3000
 ```
-
----
-
-## 📜 Available Scripts
-
-```bash
-npm run dev        # Start Next.js dev server (with Turbopack)
-npm run build      # Build for production
-npm start          # Start production server
-npm run ws         # Start WebSocket server
-npm run lint       # Run ESLint
-```
-
 ---
 
 ## 🏗️ Project Structure
@@ -137,7 +124,7 @@ velvetcode/
 
 ---
 
-## 🌐 How It Works
+## How It Works
 
 ### Room System
 1. **Create/Join Room**: Users can create a new room or join existing ones via room ID
@@ -165,22 +152,7 @@ velvetcode/
 ### Next.js
 - Using App Router and React Server Components
 - TypeScript strict mode enabled
-
----
-
-## 🚀 Deployment
-
-### Option 1: Render (Recommended for WebSockets)
-1. Push code to GitHub
-2. Create new Blueprint on [Render](https://render.com)
-3. Connect your repository
-4. Add `GEMINI_API_KEY` environment variable
-5. Deploy!
-
-### Option 2: Manual Deployment
-- **Next.js**: Deploy on Vercel, Netlify, or any Node.js host
-- **WebSocket Server**: Deploy on a VPS or container platform (Railway, Fly.io, etc.)
-
+- 
 ---
 
 ## 🤝 Contributing
@@ -189,20 +161,6 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-## 📝 License
-
-This project is open source and available under the [MIT License](LICENSE).
-
----
-
-## 🙏 Acknowledgments
-
-- [Next.js](https://nextjs.org)
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/)
-- [Socket.io](https://socket.io)
-- [Google Gemini](https://ai.google.dev)
-- [Piston API](https://github.com/engineer-man/piston)
-
 ---
 
 ## 📧 Contact
@@ -210,9 +168,3 @@ This project is open source and available under the [MIT License](LICENSE).
 **Shaheer Abbasi** - [@Shaheer-Abbasi](https://github.com/Shaheer-Abbasi)
 
 **Project Link**: [https://github.com/Shaheer-Abbasi/VelvetCode](https://github.com/Shaheer-Abbasi/VelvetCode)
-
----
-
-<div align="center">
-  <strong>Built with ❤️ using Next.js and AI</strong>
-</div>
