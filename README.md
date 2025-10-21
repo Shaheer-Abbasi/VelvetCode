@@ -168,6 +168,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📧 Contact
 
-**Shaheer Abbasi** - [@Shaheer-Abbasi](https://github.com/Shaheer-Abbasi)
+**Shaheer** - [@Shaheer-Abbasi](https://github.com/Shaheer-Abbasi)
+
+**Maria** - [@devmarzam](https://github.com/devmarzam)
 
 **Project Link**: [https://github.com/Shaheer-Abbasi/VelvetCode](https://github.com/Shaheer-Abbasi/VelvetCode)
