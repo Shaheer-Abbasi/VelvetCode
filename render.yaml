@@ -10,7 +10,7 @@ services:
         value: production
       - key: GEMINI_API_KEY
         sync: false
-      - key: WS_URL
+      - key: NEXT_PUBLIC_WS_URL
         value: wss://velvetcode-ws.onrender.com
     healthCheckPath: /
 
