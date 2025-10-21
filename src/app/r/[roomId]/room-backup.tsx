@@ -415,7 +415,7 @@ export default function Room({ params }: { params: { roomId: string } }) {
   const { roomId } = params;
   const editorRef = useRef<any>(null);
   const monacoEl = useRef<HTMLDivElement | null>(null);
-  const socketRef = useRef<typeof Socket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const [monaco, setMonaco] = useState<any>(null);
   const [isClient, setIsClient] = useState(false);
 
