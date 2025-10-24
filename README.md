@@ -102,31 +102,6 @@ http://localhost:3000
 ```
 ---
 
-## 🏗️ Project Structure
-
-```
-velvetcode/
-├── src/
-│   ├── app/
-│   │   ├── page.tsx              # Homepage
-│   │   ├── r/[roomId]/           # Room pages
-│   │   │   ├── page.tsx          # Room entry
-│   │   │   ├── room.tsx          # Main room component
-│   │   │   └── components/       # Room UI components
-│   │   └── api/
-│   │       └── ai/               # AI API routes
-│   ├── lib/
-│   │   └── piston.ts             # Code execution client
-│   └── workers/
-│       └── monaco.worker.ts      # Monaco Editor worker
-├── ws-server/
-│   └── server.ts                 # WebSocket server
-├── public/                       # Static assets
-└── package.json
-```
-
----
-
 ## How It Works
 
 ### Room System
@@ -146,30 +121,14 @@ velvetcode/
 
 ---
 
-## 🔧 Configuration
-
-### WebSocket Server
-- Default port: `4000`
-- Configurable in `ws-server/server.ts`
-
-### Next.js
-- Using App Router and React Server Components
-- TypeScript strict mode enabled
-- 
----
-
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
----
-
-## 📧 Contact
+## Contact
 
 **Shaheer** - [@Shaheer-Abbasi](https://github.com/Shaheer-Abbasi)
 
 **Maria** - [@devmarzam](https://github.com/devmarzam)
-
-**Project Link**: [https://github.com/Shaheer-Abbasi/VelvetCode](https://github.com/Shaheer-Abbasi/VelvetCode)
